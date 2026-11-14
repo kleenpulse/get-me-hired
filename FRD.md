@@ -588,6 +588,7 @@ The welcome screen and the Data screen show: "You decide how to use these contac
 | D8 | The HN monthly thread and mail-domain handling are P0, based on the first live hunt (Appendix A). | 2026-11-14 |
 | D9 | Contacts must be email-first even when a post asks for a DM or form, following the method (FR-5.6). | 2026-11-14 |
 | D10 | Only the minimum about third parties is stored, with 180-day auto-removal for closed leads (§13). | 2026-11-14 |
+| D11 | Stack: Vite with React and TypeScript, built to static files. Tailwind CSS v4 on the tokens in [DESIGN.md](DESIGN.md), Vitest for tests, Bun as the package manager. No `src/` directory. The app is fully static with no server (D5), so a server framework would add nothing. | 2026-11-14 |
 
 ## 19. Open questions
 
