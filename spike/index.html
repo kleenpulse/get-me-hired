@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Provider spike: browser access</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 68rem; padding: 0 1rem; color: #1c1917; }
+      h1 { font-size: 1.4rem; }
+      h2 { font-size: 1.1rem; margin-top: 2rem; }
+      button { font: inherit; padding: 0.5rem 1rem; cursor: pointer; }
+      table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+      th, td { border: 1px solid #d6d3d1; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+      th { background: #f5f5f4; }
+      td.body { font: 12px/1.4 ui-monospace, monospace; word-break: break-word; }
+      .pass { color: #166534; font-weight: 600; }
+      .fail { color: #991b1b; font-weight: 600; }
+      .note { color: #57534e; }
+      pre { font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; background: #f5f5f4; padding: 0.75rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Provider spike: can this browser call each provider directly?</h1>
+    <p class="note">
+      FRD FR-2.2(a). Each request goes straight from this page to the provider. A provider with no key in
+      <code>.env.local</code> gets a made-up key, which still shows whether the browser may read the answer.
+      With made-up keys nothing here costs money. With a real key, the AI SDK check sends one tiny real request
+      per provider.
+    </p>
+    <button id="run" type="button">Run the checks</button>
+    <p id="status" role="status" class="note"></p>
+
+    <h2>1. Plain requests</h2>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Provider</th>
+          <th scope="col">Request</th>
+          <th scope="col">Key</th>
+          <th scope="col">Browser access</th>
+          <th scope="col">HTTP status</th>
+          <th scope="col">Time</th>
+          <th scope="col">Start of the answer</th>
+        </tr>
+      </thead>
+      <tbody id="raw-results"></tbody>
+    </table>
+
+    <h2>2. Through the Vercel AI SDK</h2>
+    <p class="note">
+      "api-error" is a pass for browser access: the provider refused the call, and the page could read why.
+      "no-response" means the page got nothing it could read.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Provider</th>
+          <th scope="col">Model</th>
+          <th scope="col">Key</th>
+          <th scope="col">Outcome</th>
+          <th scope="col">HTTP status</th>
+          <th scope="col">Time</th>
+          <th scope="col">Detail</th>
+        </tr>
+      </thead>
+      <tbody id="sdk-results"></tbody>
+    </table>
+
+    <h2>3. Real-key checks through OpenRouter</h2>
+    <p class="note">
+      FRD FR-2.2(b) and (c): structured output, built-in web search and built-in page reading, on one cheap
+      model from each family. On OpenRouter's paid models this spends about two cents.
+    </p>
+    <button id="run-checks" type="button">Run the real-key checks</button>
+    <p id="check-status" role="status" class="note"></p>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Model</th>
+          <th scope="col">Check</th>
+          <th scope="col">Result</th>
+          <th scope="col">Time</th>
+          <th scope="col">Tokens</th>
+          <th scope="col">Cost</th>
+          <th scope="col">Notes</th>
+        </tr>
+      </thead>
+      <tbody id="check-results"></tbody>
+    </table>
+
+    <h2>4. A hunt with no search provider</h2>
+    <p class="note">
+      How far does a free key get? This reads the Hacker News hiring thread and three funding feeds with the
+      cheapest Gemini model. It needs <code>GEMINI_API_KEY</code>. It shows counts, companies and roles only.
+    </p>
+    <button id="run-hunt" type="button">Run the free hunt</button>
+    <pre id="hunt-report" role="status"></pre>
+    <script type="module" src="./probe.ts"></script>
+  </body>
+</html>
