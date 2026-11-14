@@ -439,7 +439,7 @@ Keys are never written to any of these files.
 | `status` | A value from §8.1 |
 | `next_action_on` | `YYYY-MM-DD`, or empty |
 
-**Lead key:** the normalised `source_url` plus `|` plus the lowercased company name. To normalise a URL: lowercase the scheme and host, drop `www.`, drop the fragment, drop the query except where it identifies the item (HN `?id=`), and drop any trailing slash. The original URL is stored unchanged. The key is used only for comparing.
+**Lead key:** the normalised `source_url` plus `|` plus the lowercased company name. To normalise a URL: lowercase the scheme and host, drop `www.`, drop the fragment, drop the query except where it identifies the item (HN `?id=`), drop any trailing slash, and treat `twitter.com` as `x.com`. The original URL is stored unchanged. The key is used only for comparing.
 
 **Lenient import:** rows written by older versions of the skill may share a thread URL across several companies, or have `contacts` and `contact_confidence` lists of different lengths. The import still loads them. Rows with mismatched lists are marked "Needs review", and the raw text is kept.
 
@@ -589,11 +589,83 @@ The welcome screen and the Data screen show: "You decide how to use these contac
 | D9 | Contacts must be email-first even when a post asks for a DM or form, following the method (FR-5.6). | 2026-11-14 |
 | D10 | Only the minimum about third parties is stored, with 180-day auto-removal for closed leads (§13). | 2026-11-14 |
 | D11 | Stack: Vite with React and TypeScript, built to static files. Tailwind CSS v4 on the tokens in [DESIGN.md](DESIGN.md), Vitest for tests, Bun as the package manager. No `src/` directory. The app is fully static with no server (D5), so a server framework would add nothing. | 2026-11-14 |
+| D12 | Provider adapters are built on the Vercel AI SDK (`ai` v7 with `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google` and `@openrouter/ai-sdk-provider`), not on each provider's own SDK or on hand-written requests. It gives one interface for text, structured output, the providers' web-search tools and token counts, which is what FR-2.6 asks for. The SDK and each provider package load only when needed, because the SDK core is about 96 kB gzipped and one provider adds 25 to 60 kB (measured 2026-11-14). Firecrawl isn't an AI provider and is called directly. | 2026-11-14 |
+| D13 | The default provider recommended to first-time users is Google Gemini with the `gemini-3.1-flash-lite` model. It was the cheapest model that passed the spike (§19). A free Gemini key runs a hunt of the HN thread and funding news at no cost. Turning on billing adds web search, where Google's price list gives the first 5,000 searches a month free. Web search on a billed key is still to be tested. Without it, a hunt can't find fresh LinkedIn or X posts, and the app must say so. | 2026-11-14 |
 
 ## 19. Open questions
 
 1. **Which providers pass the browser check?** Each candidate (and Firecrawl) must be tested for direct browser calls before it's promised. The spike in §17 answers this.
-2. **Default provider.** Which provider and model is recommended to first-time users, based on the spike's cost and quality results?
+
+   **First pass, 2026-11-14 (not final).** A page served from `http://localhost:5183` in Chrome 157 called each provider with a made-up key (`bun run spike`). A readable answer, even "wrong key", shows that the provider lets a browser page read its answers with those headers. It doesn't yet show that a real, successful call works, or that it works from the production address. Checks (b) and (c) of FR-2.2 are untested, and so is cost.
+
+   | Provider | Result with a made-up key |
+   |---|---|
+   | Anthropic | Readable (401) on `GET /v1/models` and `POST /v1/messages`. The requests carried the `anthropic-dangerous-direct-browser-access: true` header. |
+   | Google Gemini | Readable (400, "API key not valid") on `GET /v1beta/models` and `POST …:generateContent`. |
+   | OpenRouter | Readable (401) on `GET /api/v1/key` and `POST /api/v1/chat/completions`. |
+   | Firecrawl | Readable (401) on `GET /v2/team/credit-usage`, `POST /v2/search` and `POST /v2/scrape`. |
+   | OpenAI | **Unclear.** `GET /v1/models` is readable (401). Every `POST` tried (`/v1/responses`, `/v1/chat/completions`, `/v1/embeddings`) passes the preflight, but the 401 answer has no `Access-Control-Allow-Origin` header, so the browser hides it. A real key must show whether successful answers are readable. Even if they are, the app may be unable to read OpenAI's error answers on these endpoints (wrong key, no credit, rate limit), which AC-2.4 and AC-4.11 depend on. |
+
+   **Through the AI SDK, 2026-11-14 (not final).** The same check sent through the Vercel AI SDK (D12) gave the same results in Chrome 157. Anthropic, Gemini and OpenRouter return an error the app can read. OpenAI's refused `POST` is hidden, and the SDK passes it on as a plain "Failed to fetch" with no status. Until a real key shows more, an OpenAI key test should use `GET /v1/models`, whose answers are readable.
+
+   The SDK adds a `user-agent` header to every request. Chrome drops it, but Firefox and Safari send it. All four providers' preflight answers list `user-agent` as allowed, so those browsers should pass. That is a prediction: the check hasn't been run in Firefox or Safari yet.
+
+   **Real keys, 2026-11-14 (partial).** Two keys were tested from a browser page in Chrome 157: OpenRouter and NVIDIA. NVIDIA isn't on the candidate list in FR-2.1. It was tested because the owner has a key.
+
+   - **NVIDIA fails check (a).** Its preflight answer has no `Access-Control-Allow-Origin` header, so a browser can't call it at all, with any key. It can't be supported on the web (§20). It stays possible for the desktop app.
+   - **OpenRouter passes all three checks** through the AI SDK:
+
+   | Check | Result |
+   |---|---|
+   | (a) Browser calls | A real call answered. Error answers are readable too, including "not enough credit". |
+   | (b) Structured output | Right on all 4 models tried: `anthropic/claude-haiku-5.5`, `openai/gpt-6-luna` and 2 free models. Each one ignored an instruction planted in the page text (NFR-4). On the paid models, reading one post cost $0.0001 to $0.00016. |
+   | (c) Web search | `openai/gpt-6-luna` found the current HN "Who is hiring?" thread. That one search cost $0.011, of which $0.01 was the search fee. |
+   | (c) Page reading | OpenRouter's web fetch tool read the thread's page on 2 free models, with its free `openrouter` engine. Cost: $0. |
+
+   Not measured yet: Google models (the account ran out of credit first), Claude with search, and the cost and yield of a whole hunt (question 2).
+
+   **What these runs mean for the build:**
+
+   1. **A tool and JSON output don't mix in one call.** With a search or fetch tool in the request, 5 of 6 runs didn't return the JSON that was asked for. In the 2 runs where the raw answer was kept, the model had answered in plain sentences. The fix is two calls: one with the tool that answers in text, then one with no tools that turns the text into checked JSON. This also keeps fetched page text away from any call that holds tools (NFR-4). Both free models passed page reading this way.
+   2. **Always cap the answer length.** Without a cap, OpenRouter reserves the model's full output size and refuses the call when the account can't cover it.
+   3. **The HN thread needs no AI.** Hacker News's search API (`hn.algolia.com`) allows browser calls and returned the current "Who is hiring?" thread directly, for free. FR-4.7 can use it.
+   4. **Search fees will be most of the cost.** OpenRouter charges $0.007 to $0.014 for each search, depending on the engine. The 40 searches allowed in §12 would cost $0.28 to $0.56 in fees, before tokens. This is worked out from list prices, not measured from a hunt.
+   5. **A free path exists for everything except search.** OpenRouter's free models handled structured output and page reading. An account with no credit gets 50 free-model requests a day.
+
+   **Gemini, and a hunt with no search, 2026-11-14.** A Google Gemini key on the free tier was tested the same way, through the AI SDK from Chrome 157.
+
+   | Check | Result on the free tier |
+   |---|---|
+   | (a) Browser calls | Pass. Real calls answered, and error answers are readable. |
+   | (b) Structured output | Pass on `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`, in about 1.5 seconds. Both ignored the planted instruction. |
+   | (c) Page reading | Pass. The URL context tool read the HN thread's page. |
+   | (c) Web search | **Not available.** Every search call returned 429 "quota exceeded" at once, on every model tried. Google's price list says search is "Not available" on the free tier. On the paid tier the first 5,000 searches a month are free, then $14 per 1,000. |
+
+   The cheapest Gemini model that still works is `gemini-3.1-flash-lite`: free on the free tier, $0.25 in and $1.50 out per million tokens on the paid tier. Google has closed `gemini-2.5-flash-lite` and `gemini-2.5-flash` to new users. `gemini-3.8-flash` answered "high demand" for two minutes and was not measured.
+
+   **One hunt with no search provider**, on `gemini-3.1-flash-lite`, with an invented profile (a remote frontend engineer in Kenya):
+
+   | Stage | What it did | Result |
+   |---|---|---|
+   | HN thread | Read all 244 posts from HN's own API with no AI. Kept the 64 that mention "remote" and a wanted skill. Sent those to the model, 8 at a time. | 12 leads kept, 52 dropped (38 location, 11 role mismatch, 3 pay below floor). 8 calls. |
+   | Funding | Read 3 news listing pages with the page reader, then turned each answer into JSON. | 28 rounds found, 4 of them seed or pre-seed, 2 with a date inside 14 days. 6 calls. |
+   | Fresh posts | Not possible without search. | 0 |
+   | Whole hunt | 14 calls, about 2.5 minutes run one at a time, about 35,000 tokens in and 11,000 out. | $0 on the free tier. About $0.03 at the paid list price (worked out, not billed). |
+
+   Checks done in code, not by the model: all 5 email addresses the model reported were found in the post's text (AC-5.3). 61 of the 64 reasons it quoted were found word for word in the post. No answer pointed at a post that wasn't sent.
+
+   Not done in this hunt: confirming round dates at the source (AC-4.6), finding people and contacts for funded startups, and anything on LinkedIn or X.
+
+   **More findings for the build:**
+
+   6. **The page reader opens web pages, not feeds.** Gemini's URL context tool read every listing page tried and failed on every RSS feed, including the same sites' own feeds. Funding sources should be listing pages.
+   7. **A feed or tag page can be stale and still look alive.** TechCrunch's "seed funding" tag stopped in March 2026 but still serves 20 items. Each source needs a check on the date of its newest item.
+   8. **Ask the model to quote its reason, then check the quote in code.** It is cheap, it catches invented reasons, and it gives "Dropped, and why" a real source (principle 2).
+   9. **HN needs no search and gave most of the leads,** as in the first live hunt (Appendix A).
+   10. **Gemini's rate-limit answer has no `retry-after` header the page can read.** The wait time must come from the answer's body, or fall back to the 10 seconds in AC-4.11.
+   11. **Gemini's search tool takes a time range** (a start and an end time), so past-day searches may not need Firecrawl (FR-2.3). This is from the SDK's docs and is untested, because the free tier has no search.
+
+2. **Default provider.** Which provider and model is recommended to first-time users, based on the spike's cost and quality results? **Answered by D13:** Google Gemini with `gemini-3.1-flash-lite`.
 3. **Funding regions.** Which regional news sources ship by default (Africa, India, EU, US)?
 
 ## 20. Risks
