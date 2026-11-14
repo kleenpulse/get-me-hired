@@ -16,3 +16,7 @@
 # Scratch output from search tools
 *.err
 .firecrawl/
+
+# Dependencies and build output
+node_modules/
+dist/
