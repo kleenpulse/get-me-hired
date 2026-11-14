@@ -1,0 +1,18 @@
+# Personal hunt data (get-me-hired skill / app data folder).
+# Anchored to the repo root so sample fixtures elsewhere in the tree stay tracked.
+/profile.md
+/leads.csv
+/leads.*.json
+/runs/
+/backups/
+/get-me-hired-backup*.zip
+
+# Secrets and local tooling
+.env
+.env.*
+!.env.example
+.netlify/
+
+# Scratch output from search tools
+*.err
+.firecrawl/
