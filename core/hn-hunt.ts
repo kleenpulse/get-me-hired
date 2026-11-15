@@ -334,16 +334,21 @@ export async function runHnStage(context: StageContext): Promise<StageEnd> {
         maxRetries: MAX_RETRIES,
         abortSignal: signal,
       });
-      context.addUsage(result.usage, bound);
-      const seen = new Set<string>();
-      for (const verdict of result.output.leads as Verdict[]) {
-        const comment = byId.get(verdict.commentId);
-        // An id that wasn't sent, or a second answer for one comment, is ignored.
-        if (!comment || seen.has(comment.id)) continue;
-        seen.add(comment.id);
-        const judged = judge(verdict, comment, settings.profile, now);
-        if (judged.kind === 'drop') context.drop(judged.dropped);
-        else context.keep(judged.lead);
+      try {
+        const seen = new Set<string>();
+        for (const verdict of result.output.leads as Verdict[]) {
+          const comment = byId.get(verdict.commentId);
+          // An id that wasn't sent, or a second answer for one comment, is ignored.
+          if (!comment || seen.has(comment.id)) continue;
+          seen.add(comment.id);
+          const judged = judge(verdict, comment, settings.profile, now);
+          if (judged.kind === 'drop') context.drop(judged.dropped);
+          else context.keep(judged.lead);
+        }
+      } finally {
+        // Counted after the batch is judged, so the progress saved with this call holds its leads
+        // too (FR-4.15), and counted even if judging failed: the call happened.
+        context.addUsage(result.usage, bound);
       }
     } catch (error) {
       if (signal.aborted) return 'cancelled';
