@@ -5,7 +5,7 @@
 import { Banknote, Briefcase, Check, Clock, Copy, Mail, MapPin, ThumbsUp } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { personEntry } from '@/core/block';
-import { emailedCount, type Contact, type Lead, type Person, type Signal } from '@/core/lead';
+import { cleanNotes, emailedCount, NOTES_MAX, type Contact, type Lead, type Person, type Signal } from '@/core/lead';
 import { nextStepFor } from '@/core/lifecycle';
 import { PROVIDERS } from '@/core/providers';
 import { newGroupOf, type TodayReason } from '@/core/ranking';
@@ -265,6 +265,66 @@ function SectionLabel({ children, aside }: { children: React.ReactNode; aside?: 
   );
 }
 
+/**
+ * The user's own notes on a lead (FR-6.7). Plain text in a text box, never
+ * shown as HTML or Markdown. Saved when the box loses focus, or with Save.
+ * They stay with the lead when a person is deleted or removed, travel in
+ * backups, and never go into a hunt.
+ */
+function NotesBlock({ lead }: { lead: Lead }) {
+  const { actions } = useApp();
+  const id = useId();
+  const [text, setText] = useState(lead.notes);
+  const [saved, setSaved] = useState(false);
+  // What this box last saved, so a change made elsewhere (an import) shows here.
+  const lastSaved = useRef(lead.notes);
+  useEffect(() => {
+    if (lead.notes === lastSaved.current) return;
+    lastSaved.current = lead.notes;
+    setText(lead.notes);
+  }, [lead.notes]);
+
+  const dirty = cleanNotes(text) !== lead.notes;
+  const save = () => {
+    if (!dirty) return;
+    const next = cleanNotes(text);
+    lastSaved.current = next;
+    actions.setNotes(lead.key, next);
+    setSaved(true);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-ink-2 type-caption">
+        {t.notesLabel}
+      </label>
+      <textarea
+        id={id}
+        name="notes"
+        rows={3}
+        maxLength={NOTES_MAX}
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          setSaved(false);
+        }}
+        onBlur={save}
+        aria-describedby={`${id}-help`}
+        className="min-h-24 w-full resize-y rounded-tile bg-lift px-4 py-3 text-foreground placeholder:text-ink-3 type-body"
+      />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p id={`${id}-help`} className="max-w-[68ch] text-ink-2 type-caption">
+          {t.notesHelp} {t.notesLeft(NOTES_MAX - text.length)}
+        </p>
+        {dirty && <Button onClick={save}>{t.saveNotes}</Button>}
+        <span role="status" className="text-ink-2 type-caption">
+          {saved && !dirty ? t.notesSaved : ''}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 interface LeadCardProps {
   lead: Lead;
   /** Why the lead is in Today's list. Left out on the Board. */
@@ -405,6 +465,8 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
           ))}
         </ul>
       </div>
+
+      <NotesBlock lead={lead} />
     </Card>
   );
 }
