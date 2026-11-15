@@ -51,6 +51,7 @@ import { deletePerson } from './erase';
 import { capAllowsStart, capState, type CapState } from './cap';
 import { addFound, applyBlocks } from './found';
 import { browserLocks, withHuntLock } from './hunt-lock';
+import { unsavedScreen } from './router';
 import { shouldRunOnOpen } from './run-on-open';
 import { TabSync } from './tab-sync';
 import { usd } from './format';
@@ -137,8 +138,11 @@ export interface AppState {
   loadFailed: false | 'broken' | 'newer' | 'blocked';
   /** True when the user chose to go on in a browser that won't store data. Nothing is saved. */
   savingOff: boolean;
-  /** True after a save here was refused because another tab saved first, and the latest was read. */
-  changedElsewhere: boolean;
+  /**
+   * Set when another tab's data was read in and something here gave way to it:
+   * `dropped`, a save here was refused; `draft-kept`, unsaved form changes here were kept.
+   */
+  changedElsewhere: false | 'dropped' | 'draft-kept';
   /** Counts the times another tab's saved data was read in. Screens use it as a key, so their forms start over. */
   reloads: number;
   /**
@@ -240,7 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   latest.current = data;
   // Tells the other tabs of this app that the saved data changed.
   const channel = useRef<BroadcastChannel | null>(null);
-  const [changedElsewhere, setChangedElsewhere] = useState(false);
+  const [changedElsewhere, setChangedElsewhere] = useState<AppState['changedElsewhere']>(false);
   const [reloads, setReloads] = useState(0);
 
   // Keeps this tab in step with the others: ordered writes over the right revision, and
@@ -254,8 +258,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           loaded.current = next;
           setData(next);
           setReloads((count) => count + 1);
+          // Profile with unsaved changes keeps them (App.tsx doesn't re-key it). Say so.
+          if (unsavedScreen() === 'profile') setChangedElsewhere((current) => current || 'draft-kept');
         },
-        dropped: () => setChangedElsewhere(true),
+        dropped: () => setChangedElsewhere('dropped'),
       },
     );
   }

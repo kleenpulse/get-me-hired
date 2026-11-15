@@ -1,12 +1,13 @@
 import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { MotionConfig } from 'motion/react';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { ScreenBoundary } from '@/components/ScreenBoundary';
 import { Shell } from '@/components/Shell';
 import { Banner, Button, Card } from '@/components/ui';
-import { useRoute, type Route } from './router';
+import { unsavedScreen, useRoute, type Route } from './router';
 import { Today } from './screens/Today';
 import { Welcome } from './screens/Welcome';
+import { screenKey } from './screen-key';
 import { useApp } from './state';
 import { strings } from './strings';
 
@@ -67,6 +68,9 @@ function LoadFailed({ reason }: { reason: 'broken' | 'newer' | 'blocked' }) {
 export function App() {
   const { ready, data, saveFailed, loadFailed, savingOff, changedElsewhere, reloads, actions } = useApp();
   const route = useRoute();
+  // Profile keeps its draft while it has unsaved changes: it moves to the new key only once it has none.
+  const profileKey = useRef(reloads);
+  profileKey.current = screenKey(unsavedScreen() === 'profile', reloads, profileKey.current);
   const welcomed = data.settings.welcomeDone;
 
   useEffect(() => {
@@ -104,7 +108,7 @@ export function App() {
                 icon={RefreshCw}
                 action={<Button onClick={actions.dismissChangedElsewhere}>{strings.errors.dismiss}</Button>}
               >
-                {strings.errors.changedElsewhere}
+                {changedElsewhere === 'draft-kept' ? strings.errors.draftKept : strings.errors.changedElsewhere}
               </Banner>
             </div>
           )}
@@ -120,7 +124,7 @@ export function App() {
             >
               {route === 'board' && <Board key={reloads} />}
               {route === 'history' && <History key={reloads} />}
-              {route === 'profile' && <Profile key={reloads} />}
+              {route === 'profile' && <Profile key={profileKey.current} />}
               {route === 'data' && <Data key={reloads} />}
               {route === 'settings' && <Settings key={reloads} />}
             </Suspense>
