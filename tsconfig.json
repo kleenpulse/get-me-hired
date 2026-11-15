@@ -30,6 +30,7 @@
     "app",
     "components",
     "core",
+    "pwa",
     "spike",
     "vite.config.ts"
   ],

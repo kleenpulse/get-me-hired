@@ -24,6 +24,7 @@ import { Banner, Button, Card, cx, EmptyState, StatusPill, type Icon } from '@/c
 import { capAllowsStart, capState, type CapState } from '../cap';
 import { clockTime, usd } from '../format';
 import { anySourceOn } from '../sources';
+import { useOnline } from '../online';
 import { Link } from '../router';
 import { useApp, type HuntState } from '../state';
 import { strings } from '../strings';
@@ -171,6 +172,7 @@ function capNote(cap: CapState): string {
 
 export function Today() {
   const { data, today, now, hunt, keyProviders, keyLock, interruptedHunt, actions } = useApp();
+  const online = useOnline();
   const [filter, setFilter] = useState<Filter>('all');
   const { sampleMode, dailyTarget, cadence } = data.settings;
 
@@ -199,6 +201,8 @@ export function Today() {
   const sourcesOff = !sampleMode && !anySourceOn(data.settings);
   // Encrypted keys this tab hasn't unlocked: saved, but not usable here (FR-10.4).
   const keysLocked = !sampleMode && keyLock === 'locked';
+  // A real hunt needs a connection (FRD §10.2). A sample hunt calls nothing.
+  const offline = !sampleMode && !online;
   const canHunt = sampleMode || (missing.length === 0 && hasKey && !sourcesOff && !keysLocked);
   // The estimate before every real hunt, and the monthly cap (FR-4.13, AC-4.13).
   const cap = !sampleMode && provider && hasKey && missing.length === 0 && !sourcesOff && !keysLocked ? capState(data, provider, today) : null;
@@ -257,7 +261,7 @@ export function Today() {
           <Button
             variant="primary"
             icon={sampleMode ? FlaskConical : undefined}
-            disabled={!canHunt || !capOk || hunt.running}
+            disabled={!canHunt || offline || !capOk || hunt.running}
             onClick={actions.runHunt}
             aria-describedby={cap ? 'hunt-note hunt-cost' : 'hunt-note'}
             className="w-full"
@@ -273,7 +277,9 @@ export function Today() {
                   ? t.huntNeedsKey
                   : keysLocked
                     ? t.keysLocked
-                    : sourcesOff
+                    : offline
+                      ? t.offline
+                      : sourcesOff
                     ? t.sourcesOff
                     : t.huntReady}
           </p>
@@ -319,7 +325,7 @@ export function Today() {
               icon={TriangleAlert}
               action={
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="primary" onClick={() => actions.settleInterrupted(true)} disabled={!canHunt || !capOk}>
+                  <Button variant="primary" onClick={() => actions.settleInterrupted(true)} disabled={!canHunt || offline || !capOk}>
                     {t.interrupted.runAgain}
                   </Button>
                   <Button onClick={() => actions.settleInterrupted(false)}>{t.interrupted.dismiss}</Button>

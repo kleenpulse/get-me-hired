@@ -1,10 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { pwa } from './pwa/vite-plugin';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), pwa()],
   resolve: {
     // `@/` points at the repo root. There is no `src/` directory.
     alias: { '@': fileURLToPath(new URL('.', import.meta.url)) },

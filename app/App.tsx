@@ -1,4 +1,4 @@
-import { RefreshCw, TriangleAlert } from 'lucide-react';
+import { RefreshCw, TriangleAlert, WifiOff } from 'lucide-react';
 import { LazyMotion, MotionConfig } from 'motion/react';
 import { lazy, Suspense, useEffect, useRef } from 'react';
 import { ScreenBoundary } from '@/components/ScreenBoundary';
@@ -8,6 +8,8 @@ import { unsavedScreen, useRoute, type Route } from './router';
 import { Today } from './screens/Today';
 import { Welcome } from './screens/Welcome';
 import { screenKey } from './screen-key';
+import { useOnline } from './online';
+import { applyUpdate, useUpdateReady } from './pwa';
 import { useApp } from './state';
 import { strings } from './strings';
 
@@ -72,6 +74,8 @@ function LoadFailed({ reason }: { reason: 'broken' | 'newer' | 'blocked' }) {
 export function App() {
   const { ready, data, saveFailed, loadFailed, savingOff, changedElsewhere, reloads, actions } = useApp();
   const route = useRoute();
+  const online = useOnline();
+  const updateReady = useUpdateReady();
   // Profile keeps its draft while it has unsaved changes: it moves to the new key only once it has none.
   const profileKey = useRef(reloads);
   profileKey.current = screenKey(unsavedScreen() === 'profile', reloads, profileKey.current);
@@ -105,6 +109,20 @@ export function App() {
             <div role="alert" className="mb-gutter">
               <Banner tone={savingOff ? 'warning' : 'failure'} icon={TriangleAlert}>
                 {savingOff ? strings.errors.savingOff : strings.errors.storage}
+              </Banner>
+            </div>
+          )}
+          {/* FRD §10.2 "Offline": leads still work here, hunts need a connection. */}
+          {!online && (
+            <div role="status" className="mb-gutter">
+              <Banner icon={WifiOff}>{strings.offline}</Banner>
+            </div>
+          )}
+          {/* A new version installed in the background (FR-1.3). It takes over only on Reload. */}
+          {updateReady && (
+            <div role="status" className="mb-gutter">
+              <Banner icon={RefreshCw} action={<Button onClick={applyUpdate}>{strings.update.reload}</Button>}>
+                {strings.update.ready}
               </Banner>
             </div>
           )}
