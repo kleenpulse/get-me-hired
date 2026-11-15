@@ -54,6 +54,18 @@ describe('sample leads (FR-1.4)', () => {
     expect(new Set(all.map((lead) => lead.key)).size).toBe(all.length);
   });
 
+  it('keeps each history in step with the emailed date', () => {
+    for (const lead of buildSamplePipeline(NOW)) {
+      const emailedOn = lead.people[0]?.emailedOn[0];
+      const times = lead.statusHistory.map((change) => new Date(change.at));
+      const emailed = lead.statusHistory.findIndex((change) => change.status === 'emailed');
+      expect(localDate(times[emailed] ?? new Date(0))).toBe(emailedOn);
+      expect(times.every((time, index) => index === 0 || time >= (times[index - 1] ?? time))).toBe(true);
+      expect(times.every((time) => time <= NOW)).toBe(true);
+      expect(lead.statusHistory.at(-1)?.status).toBe(lead.status);
+    }
+  });
+
   it('includes a follow-up that is due, so Today shows one', () => {
     const today = localDate(NOW);
     const due = buildSamplePipeline(NOW).flatMap((lead) => followupsDue(lead, today));

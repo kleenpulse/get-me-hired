@@ -4,9 +4,24 @@
 
 import type { DropReason, HuntStepId } from '@/core/hunt';
 import type { Attention, ContactLabel, LeadStatus, Signal, Tier } from '@/core/lead';
+import type { RemotePreference, RequiredField } from '@/core/profile';
 import type { NewGroup, TodayGroup } from '@/core/ranking';
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** "a", "a and b", "a, b and c". */
+export const listWords = (items: readonly string[]) =>
+  items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+
+const fieldNames: Record<RequiredField, string> = {
+  roles: 'the roles you want',
+  skills: 'your skills',
+  location: 'where you live',
+  floor: 'your pay floor',
+};
+
+/** "the roles you want and your pay floor", for the fields still empty (AC-3.6). */
+const missingWords = (fields: readonly RequiredField[]) => listWords(fields.map((field) => fieldNames[field]));
 
 export const strings = {
   appName: 'Get Me Hired',
@@ -18,6 +33,7 @@ export const strings = {
     label: 'Main',
     today: 'Today',
     board: 'Board',
+    profile: 'Profile',
     data: 'Data',
   },
 
@@ -77,12 +93,20 @@ export const strings = {
     people: (count: number) => plural(count, 'person', 'people'),
     runHunt: "Run today's hunt",
     runSampleHunt: 'Run a sample hunt',
+    huntNeedsProfile: (fields: readonly RequiredField[]) =>
+      `Before a hunt can run, add ${missingWords(fields)} to your profile.`,
     huntNeedsKey:
       'Real hunts are not built yet in this early version. You can run a sample hunt to see how it works.',
     sampleHuntNote: 'A sample hunt searches nothing and sends nothing to any service.',
     leftOut: (count: number) =>
       `${plural(count, 'more lead is', 'more leads are')} waiting. They will show once you get through today's list.`,
     empty: {
+      noProfile: {
+        title: "Let's set up your profile first",
+        body: 'The hunt uses it to find leads that fit you. You can also look around with invented sample leads.',
+        action: 'Set up profile',
+        sample: 'Try with sample data',
+      },
       first: {
         title: 'Nothing here yet',
         body: 'This early version cannot run a real hunt yet. You can look around with sample leads. They are invented, and they are always labelled.',
@@ -241,6 +265,118 @@ export const strings = {
     },
   },
 
+  profile: {
+    title: 'Your profile',
+    intro:
+      'The hunt reads this to decide which leads fit you. Answer in your own words. Nothing is saved until you press Save profile.',
+    required: 'Required',
+    missing: (fields: readonly RequiredField[]) => `Before a hunt can run, add ${missingWords(fields)}.`,
+    complete: 'Your profile has everything a hunt needs.',
+    groups: {
+      basics: { title: 'The five questions', caption: 'The same five questions the Get Me Hired skill asks.' },
+      prefer: { title: 'What you prefer', caption: 'Leads outside these get a tag, but they stay on your list.' },
+      skip: { title: 'What to skip', caption: 'Leads that match these are dropped.' },
+      moving: { title: 'Moving and visas', caption: 'Fill these in only if they matter to you.' },
+      background: {
+        title: 'About you',
+        caption: 'Facts the hunt can link to a company, so you have something real to mention.',
+      },
+    },
+    fields: {
+      roles: {
+        label: 'Roles you want',
+        help: 'Type a role and press Enter. Add as many as you like.',
+        examples: ['Frontend engineer', 'Design engineer', 'Full-stack engineer', 'Product designer'],
+      },
+      skills: {
+        label: 'Your skills and tools',
+        help: 'The tools you use and what you are best at.',
+        examples: ['TypeScript', 'React', 'Python', 'Figma'],
+      },
+      location: { label: 'Where you live', help: 'City and country, for example "Lagos, Nigeria".', placeholder: 'City, country' },
+      remote: {
+        label: 'How you want to work',
+        options: {
+          remote: 'Remote only',
+          hybrid: 'Remote or hybrid',
+          any: 'Remote, hybrid or in an office',
+        } satisfies Record<RemotePreference, string>,
+      },
+      timeZone: { label: 'Your time zone', help: 'For example "UTC+1". Leads far from it get a tag.', placeholder: 'UTC+1' },
+      floor: {
+        label: 'Your pay floor',
+        help: 'The least you would take, for example "$60k a year". Jobs that pay less are dropped.',
+        placeholder: '$60k a year',
+      },
+      proofLinks: {
+        label: 'Proof links',
+        help: '2 to 4 things you built. Each one gets a link and one line about it.',
+        item: (number: number) => `Proof link ${number}`,
+        url: 'Link',
+        line: 'One line about it',
+        add: 'Add a proof link',
+        remove: (number: number) => `Remove proof link ${number}`,
+        bad: 'This needs a web address that starts with https://',
+      },
+      domains: {
+        label: 'Fields you care about',
+        help: 'The kinds of companies you want to work for.',
+        examples: ['AI dev tools', 'Fintech', 'Design tools', 'Climate', 'Health', 'Education'],
+      },
+      stages: {
+        label: 'Company stages',
+        help: 'How far along a company is. Seed means it just raised its first real money.',
+        examples: ['Pre-seed', 'Seed', 'Series A', 'Series B or later'],
+      },
+      teamSize: { label: 'Team size', help: 'For example "under 20 people".', placeholder: 'Under 20 people' },
+      skipCompanies: {
+        label: 'Companies or fields to skip',
+        help: 'Names or kinds of companies you never want to see.',
+        examples: ['Ad tech', 'Gambling', 'Crypto'],
+      },
+      skipRoles: {
+        label: 'Roles to skip',
+        help: 'Kinds of jobs you do not want.',
+        examples: ['Mobile only', 'QA', 'Sales engineer'],
+      },
+      relocation: {
+        label: 'Would you move for a job?',
+        help: 'For example "only for at least $90k with visa help". Leave it empty if you would not move.',
+      },
+      visa: { label: 'Visa needs', help: 'For example "I need a visa to work in the US".' },
+      background: {
+        label: 'Facts about you',
+        help: 'One fact each, for example "I ran a design studio for 3 years".',
+        item: (number: number) => `Fact ${number}`,
+        add: 'Add a fact',
+        remove: (number: number) => `Remove fact ${number}`,
+      },
+    },
+    chips: {
+      examples: 'Ideas:',
+      add: (item: string) => `Add ${item}`,
+      remove: (item: string) => `Remove ${item}`,
+      added: (item: string) => `${item} added.`,
+      removed: (item: string) => `${item} removed.`,
+    },
+    save: 'Save profile',
+    saved: 'Profile saved.',
+    unsaved: 'You have changes that are not saved yet.',
+    allSaved: 'All changes are saved.',
+    fixFirst: 'Fix the proof links marked below, then save.',
+    leave: 'Your profile has changes that are not saved. Leave without saving?',
+    file: {
+      title: 'profile.md',
+      body: 'The same file the Get Me Hired skill uses. Download it to keep a copy, or open one to fill in this form.',
+      download: 'Download profile.md',
+      open: 'Open a profile.md',
+      opened: 'Loaded from the file. Check it, then press Save profile.',
+      notProfile: 'This file does not look like a profile.md. It needs a "Five questions" heading.',
+      tooBig: 'This file is too big to be a profile.md.',
+      unreadable: 'This file could not be read.',
+    },
+  },
+
   dropReasons: {
     stale: 'Too old',
     'too-popular': 'Too many reactions',
@@ -277,10 +413,10 @@ export const strings = {
     },
     deleteAll: {
       title: 'Delete everything',
-      body: 'This wipes every lead and setting from this browser. It cannot be undone.',
+      body: 'This wipes your profile and every lead and setting from this browser. It cannot be undone.',
       open: 'Delete everything…',
       confirmTitle: 'Delete everything?',
-      confirmBody: 'Every lead and setting in this browser will be wiped. This cannot be undone.',
+      confirmBody: 'Your profile and every lead and setting in this browser will be wiped. This cannot be undone.',
       typeLabel: 'Type DELETE to confirm',
       word: 'DELETE',
       confirm: 'Delete everything',
@@ -292,6 +428,26 @@ export const strings = {
   errors: {
     title: 'Something went wrong',
     storage: 'Your data could not be saved in this browser. Changes you make now may be lost when you close the tab.',
-    load: 'Your saved data could not be opened.',
+    savingOff:
+      'Saving is off, because this browser is not letting Get Me Hired store data. Everything you do here is lost when you close this tab.',
+    load: {
+      broken: {
+        title: 'Your saved data could not be opened',
+        body: 'Nothing has been changed or deleted. Reload the page to try again.',
+        action: 'Try again',
+      },
+      blocked: {
+        title: 'This browser is not letting Get Me Hired save data',
+        body: 'Get Me Hired keeps everything in this browser, so it needs to store data here. If you block cookies or site data, allow them for this site, then try again. Some private windows do not allow it either.',
+        action: 'Try again',
+        continue: 'Continue without saving',
+        continueNote: 'You can look around, but nothing you do will be kept after you close this tab.',
+      },
+      newer: {
+        title: 'Update the app first',
+        body: 'Your data was saved by a newer version of Get Me Hired. Reload the page to get the newest version. Nothing has been changed or deleted.',
+        action: 'Reload the page',
+      },
+    },
   },
 } as const;

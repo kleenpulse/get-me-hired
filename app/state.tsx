@@ -14,6 +14,7 @@ import {
 import { localDate } from '@/core/dates';
 import type { HuntProgress, HuntResult } from '@/core/hunt';
 import type { Lead, LeadStatus } from '@/core/lead';
+import { cleanProfile, type Profile } from '@/core/profile';
 import {
   applyAutomaticMoves,
   markEmailed,
@@ -27,6 +28,8 @@ import { emptyData, type AppData, type RunRecord } from './data';
 import {
   clearData,
   loadData,
+  NewerDataError,
+  StorageBlockedError,
   readPersistence,
   requestPersistence,
   saveData,
@@ -52,6 +55,10 @@ interface Actions {
   unmarkEmailed: (key: string, personIndex: number) => void;
   markFollowupSent: (key: string, personIndex: number) => void;
   setStatus: (key: string, status: LeadStatus) => void;
+  /** Saves the profile, cleaned first, so what is saved is what `profile.md` can carry. */
+  saveProfile: (profile: Profile) => void;
+  /** Runs the app in memory only, after the browser refused to store data. */
+  continueWithoutSaving: () => void;
   deleteEverything: () => Promise<void>;
 }
 
@@ -65,7 +72,10 @@ export interface AppState {
   persistence: Persistence | 'unknown';
   /** True when the last save failed, so the user can be told. */
   saveFailed: boolean;
-  loadFailed: boolean;
+  /** Why the saved data could not be opened. Nothing is saved over it while this is set. */
+  loadFailed: false | 'broken' | 'newer' | 'blocked';
+  /** True when the user chose to go on in a browser that won't store data. Nothing is saved. */
+  savingOff: boolean;
   hunt: HuntState;
   actions: Actions;
 }
@@ -128,7 +138,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [now, setNow] = useState(() => new Date());
   const [persistence, setPersistence] = useState<AppState['persistence']>('unknown');
   const [saveFailed, setSaveFailed] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadFailed, setLoadFailed] = useState<AppState['loadFailed']>(false);
+  const [savingOff, setSavingOff] = useState(false);
   const [hunt, setHunt] = useState<HuntState>(IDLE_HUNT);
 
   const today = localDate(now);
@@ -150,7 +161,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setData(saved);
         }
       })
-      .catch(() => active && setLoadFailed(true))
+      .catch(
+        (error: unknown) =>
+          active &&
+          setLoadFailed(
+            error instanceof NewerDataError ? 'newer' : error instanceof StorageBlockedError ? 'blocked' : 'broken',
+          ),
+      )
       .finally(() => active && setReady(true));
     readPersistence()
       .then((value) => active && setPersistence(value))
@@ -162,7 +179,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Save after every change. The first real save also asks the browser to keep the data (AC-9.1).
   useEffect(() => {
-    if (!ready || loadFailed || data === loaded.current) return;
+    if (!ready || loadFailed || savingOff || data === loaded.current) return;
     loaded.current = data;
     saveData(data).then(
       () => setSaveFailed(false),
@@ -172,7 +189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       askedToPersist.current = true;
       requestPersistence().then(setPersistence, () => setPersistence('unsupported'));
     }
-  }, [data, ready, loadFailed]);
+  }, [data, ready, loadFailed, savingOff]);
 
   // Keep the clock moving, so ages and "today" stay right while the tab is open.
   useEffect(() => {
@@ -284,6 +301,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         update(key, (lead, moment) => markFollowupSent(lead, personIndex, localDate(moment))),
       setStatus: (key, status) => update(key, (lead, moment) => setStatus(lead, status, localDate(moment), moment)),
 
+      saveProfile: (profile) => setData((current) => ({ ...current, profile: cleanProfile(profile) })),
+
+      // Skips the welcome screens: their last step says data is saved, which isn't true now.
+      continueWithoutSaving: () => {
+        setSavingOff(true);
+        setLoadFailed(false);
+        setData((current) => ({ ...current, settings: { ...current.settings, welcomeDone: true } }));
+      },
+
       deleteEverything: async () => {
         huntControl.current?.abort();
         await clearData();
@@ -296,8 +322,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [runHunt]);
 
   const state = useMemo<AppState>(
-    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, hunt, actions }),
-    [ready, data, now, today, persistence, saveFailed, loadFailed, hunt, actions],
+    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, hunt, actions }),
+    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, hunt, actions],
   );
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;

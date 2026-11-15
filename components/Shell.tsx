@@ -1,7 +1,7 @@
 // The app shell: one white frame, with a labelled rail on wide screens and a
 // bottom bar on narrow ones (DESIGN.md, Layout).
 
-import { CalendarCheck, Columns3, Database } from 'lucide-react';
+import { CalendarCheck, Columns3, Database, UserRound } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { Link, type Route } from '@/app/router';
@@ -11,6 +11,7 @@ import { cx, type Icon } from './ui';
 const ITEMS: { route: Route; label: string; icon: Icon; pinned?: boolean }[] = [
   { route: 'today', label: strings.nav.today, icon: CalendarCheck },
   { route: 'board', label: strings.nav.board, icon: Columns3 },
+  { route: 'profile', label: strings.nav.profile, icon: UserRound, pinned: true },
   { route: 'data', label: strings.nav.data, icon: Database, pinned: true },
 ];
 

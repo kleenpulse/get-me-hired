@@ -3,6 +3,7 @@
 import type { DroppedLead, HuntResult } from '@/core/hunt';
 import type { Lead } from '@/core/lead';
 import { DEFAULT_CADENCE, type Cadence } from '@/core/lifecycle';
+import { emptyProfile, type Profile } from '@/core/profile';
 
 export const FORMAT_VERSION = 1;
 export const DEFAULT_DAILY_TARGET = 20;
@@ -31,6 +32,8 @@ export interface RunRecord {
 
 export interface AppData {
   formatVersion: typeof FORMAT_VERSION;
+  /** `null` until the user saves a profile for the first time. */
+  profile: Profile | null;
   leads: Lead[];
   settings: Settings;
   runs: RunRecord[];
@@ -39,6 +42,7 @@ export interface AppData {
 export function emptyData(): AppData {
   return {
     formatVersion: FORMAT_VERSION,
+    profile: null,
     leads: [],
     settings: {
       welcomeDone: false,
@@ -47,5 +51,16 @@ export function emptyData(): AppData {
       cadence: DEFAULT_CADENCE,
     },
     runs: [],
+  };
+}
+
+/** Fills in parts that data saved by an earlier build of the app doesn't have yet. */
+export function withDefaults(saved: AppData): AppData {
+  const fresh = emptyData();
+  return {
+    ...fresh,
+    ...saved,
+    profile: saved.profile ? { ...emptyProfile(), ...saved.profile } : null,
+    settings: { ...fresh.settings, ...saved.settings },
   };
 }
