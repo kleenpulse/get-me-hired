@@ -295,6 +295,18 @@ describe('the monthly cap in a backup (AC-4.13)', () => {
     }
   });
 
+  it('carries run on open, and takes only a real true or false (FR-4.2)', async () => {
+    const data: AppData = { ...emptyData(), settings: { ...emptyData().settings, runOnOpen: true } };
+    const result = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!result.ok) throw new Error('backup unreadable');
+    expect(result.incoming.settings?.runOnOpen).toBe(true);
+    for (const bad of ['true', 1, null]) {
+      const incoming = await read({ settings: { ...settings(5), run_on_open: bad } });
+      expect(incoming.settings).not.toHaveProperty('runOnOpen');
+    }
+    expect((await read({ settings: { ...settings(5), run_on_open: false } })).settings?.runOnOpen).toBe(false);
+  });
+
   it('reads a cost that is not a sane dollar figure as unknown, never as $0', async () => {
     expect((await read({ runs: [run(0.5)] })).runs[0]?.listCost).toBe(0.5);
     expect((await read({ runs: [run(null)] })).runs[0]?.listCost).toBeNull();

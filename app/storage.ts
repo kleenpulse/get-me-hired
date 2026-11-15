@@ -70,8 +70,55 @@ export async function loadData(): Promise<AppData | null> {
   return withDefaults(saved);
 }
 
-export async function saveData(data: AppData): Promise<void> {
-  await transact('readwrite', (store) => store.put(data, RECORD));
+/**
+ * Thrown when another tab saved since this tab last read or wrote the data.
+ * Nothing was written: the tab reads the data again, so it never overwrites
+ * another tab's changes, such as a hunt's new leads (NFR-7).
+ */
+export class StaleDataError extends Error {
+  constructor() {
+    super('The data was changed in another tab');
+    this.name = 'StaleDataError';
+  }
+}
+
+/** The revision of a saved record: how many times it was saved. 0 for none, or for data from before revisions. */
+export function revisionOf(saved: unknown): number {
+  if (typeof saved !== 'object' || saved === null) return 0;
+  const revision = (saved as { revision?: unknown }).revision;
+  return typeof revision === 'number' && Number.isInteger(revision) && revision >= 0 ? revision : 0;
+}
+
+/**
+ * Saves the data over revision `base`, the one this tab last read or wrote,
+ * and resolves with the new revision. The check and the write are one
+ * transaction, so no other tab can save in between. When the stored revision
+ * isn't `base`, nothing is written and it rejects with `StaleDataError`.
+ */
+export async function saveData(data: AppData, base: number): Promise<number> {
+  const database = await open();
+  try {
+    return await new Promise<number>((resolve, reject) => {
+      const transaction = database.transaction(STORE, 'readwrite');
+      const store = transaction.objectStore(STORE);
+      const next = base + 1;
+      let stale = false;
+      const read = store.get(RECORD);
+      read.onsuccess = () => {
+        if (revisionOf(read.result) !== base) {
+          stale = true;
+          transaction.abort();
+          return;
+        }
+        store.put({ ...data, revision: next }, RECORD);
+      };
+      transaction.oncomplete = () => resolve(next);
+      transaction.onerror = () => reject(transaction.error ?? new Error('The save failed'));
+      transaction.onabort = () => reject(stale ? new StaleDataError() : (transaction.error ?? new Error('The save was stopped')));
+    });
+  } finally {
+    database.close();
+  }
 }
 
 /** Clears the whole store: the data and the keys (FR-9.5). */

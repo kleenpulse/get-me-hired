@@ -26,6 +26,8 @@ export interface Settings {
   dailyTarget: number;
   /** The monthly spending cap, in whole US dollars at the list price (FR-10.2, AC-4.13). */
   monthlyCap: number;
+  /** Start today's hunt when the app is opened and it hasn't run yet (FR-4.2). Off until the user turns it on. */
+  runOnOpen: boolean;
   /** The local date of the last backup download, for the 7-day reminder (FR-9.2). */
   lastBackupOn: string | null;
   /** Theme and text size (FR-10.5). */
@@ -71,6 +73,17 @@ export interface AppData {
   runs: RunRecord[];
   /** The do-not-contact list (FR-5.7). Kept until the user removes an entry. */
   doNotContact: BlockEntry[];
+  /**
+   * How many times this record was saved. Set by storage.ts on each save, so a tab
+   * holding an older copy can't overwrite a newer one. Never part of a backup.
+   */
+  revision?: number;
+  /**
+   * In this tab's memory only, never saved: which read of the data this copy was
+   * built on (tab-sync.ts), so a copy built before another tab's data was read in
+   * can't be written over it.
+   */
+  tabGeneration?: number;
 }
 
 export function emptyData(): AppData {
@@ -83,6 +96,7 @@ export function emptyData(): AppData {
       sampleMode: false,
       dailyTarget: DEFAULT_DAILY_TARGET,
       monthlyCap: DEFAULT_MONTHLY_CAP,
+      runOnOpen: false,
       cadence: DEFAULT_CADENCE,
       provider: null,
       lastBackupOn: null,
@@ -107,6 +121,7 @@ export function withDefaults(saved: AppData): AppData {
       // Older data has no display settings, and a bad value falls back to the defaults.
       display: isDisplay(saved.settings?.display) ? saved.settings.display : DEFAULT_DISPLAY,
       monthlyCap: isValidMonthlyCap(saved.settings?.monthlyCap) ? saved.settings.monthlyCap : DEFAULT_MONTHLY_CAP,
+      runOnOpen: saved.settings?.runOnOpen === true,
     },
   };
 }

@@ -51,6 +51,10 @@ export const strings = {
       target: 'People to write to each day',
       targetHelp: (min: number, max: number) => `A number from ${min} to ${max}. Today's list stops there.`,
       targetBad: (min: number, max: number) => `Use a whole number from ${min} to ${max}.`,
+      runOnOpen: 'Run the hunt when you open the app',
+      runOnOpenChoices: { off: 'Off', on: 'On' },
+      runOnOpenHelp:
+        'When it’s on, opening the app starts today’s hunt on its own if it hasn’t run yet today. Like a hunt you start, it sends your profile to your AI provider and counts toward your monthly cap. The app can’t run while its tab is closed.',
       followups: 'Follow-ups',
       followupsHelp: 'How many short follow-ups to send when someone hasn’t replied.',
       followupCount: (count: number) => (count === 0 ? 'None' : String(count)),
@@ -309,6 +313,7 @@ export const strings = {
     finished: (kept: number) => `Hunt finished. ${plural(kept, 'new lead', 'new leads')} added.`,
     cancelled: (kept: number) => `Hunt cancelled. ${plural(kept, 'lead', 'leads')} found so far ${kept === 1 ? 'was' : 'were'} kept.`,
     nothingNew: 'Hunt finished. Nothing new today.',
+    otherTab: 'A hunt is already running in another tab of this app. Wait for it to finish there.',
     yourProvider: 'your AI provider',
     seeReport: 'See the report',
     failedSources: (hosts: readonly string[]) => `We couldn't search ${listWords(hosts)} today.`,
@@ -795,6 +800,8 @@ export const strings = {
   errors: {
     title: 'Something went wrong',
     storage: 'Your data could not be saved in this browser. Changes you make now may be lost when you close the tab.',
+    changedElsewhere: 'This app was changed in another tab, so your last change here wasn’t saved. It now shows the latest.',
+    dismiss: 'Dismiss',
     savingOff:
       'Saving is off, because this browser is not letting Get Me Hired store data. Everything you do here is lost when you close this tab.',
     screen: {
