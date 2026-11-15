@@ -1,0 +1,343 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/*
+ * Self-hosted fonts (NFR-2): nothing is loaded from another site.
+ * Figtree sets the big, bold text. Poppins sets everything smaller. Geist Mono sets addresses.
+ */
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("../assets/fonts/figtree-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Latin Extended, so founders' names with accents never fall back to another face. */
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("../assets/fonts/figtree-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Poppins is not a variable font: one file for each weight the text styles use. */
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-latin-ext-400-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-latin-ext-500-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-latin-ext-600-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-latin-700-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/poppins-latin-ext-700-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/*
+ * Poppins has no tabular figures: its "1" is narrower than its "0", so a count
+ * set in it changes width as it changes. This face holds only the digits of
+ * Figtree, which has them. `.tabular` puts it first, so the digits come from
+ * Figtree and the words around them stay in Poppins.
+ */
+@font-face {
+  font-family: "Dawn Numerals";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("../assets/fonts/figtree-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0030-0039;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-mono-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-mono-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Tailwind names for the Dawn tokens. The values stay in tokens.css. */
+@theme inline {
+  --color-band: var(--band);
+  --color-sheet: var(--sheet);
+  --color-card: var(--card);
+  --color-nested: var(--card-nested);
+  --color-lift: var(--lift);
+  --color-slate: var(--slate);
+  --color-glass: var(--glass);
+  --color-foreground: var(--foreground);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hairline: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-signal: var(--signal);
+  --color-signal-ink: var(--signal-ink);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-critical-foreground: var(--critical-foreground);
+  --color-scrim: var(--scrim);
+
+  --spacing-gutter: var(--gutter);
+  --spacing-card: var(--pad-card);
+
+  --ease-dawn: var(--ease-out);
+}
+
+/*
+ * Radius and shadow utilities. They are written out here, not mapped in @theme,
+ * because the tokens already use the names Tailwind would generate.
+ */
+@utility rounded-note {
+  border-radius: var(--radius-note);
+}
+@utility rounded-tile {
+  border-radius: var(--radius-tile);
+}
+@utility rounded-card {
+  border-radius: var(--radius-card);
+}
+@utility rounded-frame {
+  border-radius: var(--radius-frame);
+}
+@utility rounded-pill {
+  border-radius: var(--radius-pill);
+}
+@utility elev-lift {
+  box-shadow: var(--shadow-lift);
+}
+@utility elev-overlay {
+  box-shadow: var(--shadow-overlay);
+}
+
+/*
+ * The seven text styles from DESIGN.md. Sizes are in rem so the Text size setting can scale them.
+ * Display and title name Figtree. The rest inherit Poppins from the page.
+ */
+@utility type-display {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility type-title {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+@utility type-label {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+@utility type-body {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  font-weight: 400;
+}
+@utility type-caption {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  font-weight: 500;
+}
+@utility type-action {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+@utility type-data {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  font-weight: 400;
+}
+
+@utility bg-dawn {
+  background-image: var(--dawn);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background: var(--band);
+    color: var(--foreground);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+
+  /* Keyboard focus: a 2px ring with a 2px gap in the ground colour. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  button,
+  select,
+  input,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* 16px inputs on phones, so iOS doesn't zoom the page on focus. */
+  @media (max-width: 639px) {
+    input,
+    select,
+    textarea {
+      font-size: 1rem;
+    }
+  }
+
+  dialog::backdrop {
+    background: var(--scrim);
+  }
+
+  .tabular {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* The fresh dot pulses only while a hunt runs. */
+@keyframes dawn-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@utility animate-fresh-dot {
+  animation: dawn-pulse 2s ease-in-out infinite;
+}
+
+@keyframes dawn-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@utility animate-panel-in {
+  animation: dawn-panel-in 320ms var(--ease-out);
+}
+
+/* Reduced motion (NFR-1): no slides, no pulse, nothing staggered. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 120ms !important;
+    scroll-behavior: auto !important;
+  }
+}

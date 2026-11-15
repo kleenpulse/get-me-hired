@@ -12,6 +12,7 @@
 .env.*
 !.env.example
 .netlify/
+.impeccable/
 
 # Scratch output from search tools
 *.err

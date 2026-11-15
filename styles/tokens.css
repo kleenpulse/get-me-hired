@@ -1,0 +1,146 @@
+/*
+ * The Dawn tokens, copied from DESIGN.md ("Tokens as CSS"). DESIGN.md is the
+ * source: change a value there first, then here. Components read these tokens
+ * and never hold a colour value of their own.
+ *
+ * `data-theme` on <html> is `light`, `dark` or absent (follow the system).
+ */
+
+:root {
+  color-scheme: light;
+
+  --band: #cfcccd;
+  --sheet: #ffffff;
+  --card: #e7e6e9;
+  --card-nested: #d1d3d7;
+  --lift: #ffffff;
+  --slate: #a9acb6;
+  --dawn: linear-gradient(180deg, #d3dae8 0%, #dddee2 30%, #e7e5da 65%, #f4ead0 100%);
+  --glass: rgb(255 255 255 / 0.6);
+
+  --foreground: #0b1325;
+  --ink-2: #4a4e58; /* 5.56:1 on --card-nested */
+  --ink-3: #62666f; /* 3.84:1 on --card-nested: outlines and placeholders only */
+  --border: rgb(11 19 37 / 0.12);
+  --primary: #0b1325;
+  --primary-foreground: #ffffff;
+  --ring: #0b1325;
+
+  --signal: #d05251; /* dot and ring only: 2.80:1 on --card-nested, so keep it on white */
+  --signal-ink: #a3302e;
+  --ok: #1b6b45;
+  --ok-soft: #d9ede1;
+  --warn: #7a4f00;
+  --warn-soft: #f5e6c4;
+  --critical: #a8261d;
+  --critical-soft: #f7dcd9;
+  /* Text on a --critical fill. White in light (7.09:1), near-black in dark (8.29:1). */
+  --critical-foreground: #ffffff;
+
+  --radius-note: 8px;
+  --radius-tile: 20px;
+  --radius-card: 28px;
+  --radius-frame: 34px;
+  --radius-pill: 999px;
+
+  --gutter: 14px;
+  --pad-card: 20px;
+
+  --shadow-lift: 0 6px 18px -8px rgb(11 19 37 / 0.18);
+  --shadow-overlay: 0 24px 60px -20px rgb(11 19 37 / 0.35);
+  --scrim: rgb(11 19 37 / 0.28);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --font-display: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-numeric: "Dawn Numerals", var(--font-sans); /* Figtree digits, Poppins words */
+}
+
+/* The dark theme is black and shades of black: neutral greys with no blue in them. */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --band: #000000;
+  --sheet: #0a0a0a;
+  --card: #161616;
+  --card-nested: #222222;
+  --lift: #2e2e2e;
+  --slate: #343434;
+  --dawn: linear-gradient(180deg, #242424 0%, #272625 30%, #2c2823 65%, #33291c 100%);
+  --glass: rgb(255 255 255 / 0.1);
+
+  --foreground: #f2f2f2;
+  --ink-2: #b8b8b8;
+  --ink-3: #8f8f8f;
+  --border: rgb(255 255 255 / 0.12);
+  --primary: #f2f2f2;
+  --primary-foreground: #0a0a0a;
+  --ring: #f2f2f2;
+
+  --signal: #e4716f;
+  --signal-ink: #f29a97;
+  --ok: #6ccb98;
+  --ok-soft: #16382b;
+  --warn: #e6b655;
+  --warn-soft: #3a2e12;
+  --critical: #f28b83;
+  --critical-soft: #42201e;
+  --critical-foreground: #0a0a0a;
+
+  --shadow-lift: 0 6px 18px -8px rgb(0 0 0 / 0.5);
+  --shadow-overlay: 0 24px 60px -20px rgb(0 0 0 / 0.7);
+  --scrim: rgb(0 0 0 / 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* The same values as [data-theme="dark"], for when the app follows the system. */
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --band: #000000;
+    --sheet: #0a0a0a;
+    --card: #161616;
+    --card-nested: #222222;
+    --lift: #2e2e2e;
+    --slate: #343434;
+    --dawn: linear-gradient(180deg, #242424 0%, #272625 30%, #2c2823 65%, #33291c 100%);
+    --glass: rgb(255 255 255 / 0.1);
+
+    --foreground: #f2f2f2;
+    --ink-2: #b8b8b8;
+    --ink-3: #8f8f8f;
+    --border: rgb(255 255 255 / 0.12);
+    --primary: #f2f2f2;
+    --primary-foreground: #0a0a0a;
+    --ring: #f2f2f2;
+
+    --signal: #e4716f;
+    --signal-ink: #f29a97;
+    --ok: #6ccb98;
+    --ok-soft: #16382b;
+    --warn: #e6b655;
+    --warn-soft: #3a2e12;
+    --critical: #f28b83;
+    --critical-soft: #42201e;
+    --critical-foreground: #0a0a0a;
+
+    --shadow-lift: 0 6px 18px -8px rgb(0 0 0 / 0.5);
+    --shadow-overlay: 0 24px 60px -20px rgb(0 0 0 / 0.7);
+    --scrim: rgb(0 0 0 / 0.5);
+  }
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --gutter: 12px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --gutter: 10px;
+    --pad-card: 16px;
+  }
+}
