@@ -14,6 +14,7 @@ import { strings } from './strings';
 // Today and Welcome load with the app. The other screens load the first time
 // they're opened, so the first page load stays small.
 const Board = lazy(() => import('./screens/Board').then((module) => ({ default: module.Board })));
+const Drafts = lazy(() => import('./screens/Drafts').then((module) => ({ default: module.Drafts })));
 const History = lazy(() => import('./screens/History').then((module) => ({ default: module.History })));
 const Profile = lazy(() => import('./screens/Profile').then((module) => ({ default: module.Profile })));
 const Data = lazy(() => import('./screens/Data').then((module) => ({ default: module.Data })));
@@ -22,6 +23,7 @@ const Settings = lazy(() => import('./screens/Settings').then((module) => ({ def
 const TITLES: Record<Route, string> = {
   today: strings.nav.today,
   board: strings.nav.board,
+  drafts: strings.nav.drafts,
   history: strings.nav.history,
   profile: strings.nav.profile,
   data: strings.nav.data,
@@ -127,6 +129,7 @@ export function App() {
               }
             >
               {route === 'board' && <Board key={reloads} />}
+              {route === 'drafts' && <Drafts />}
               {route === 'history' && <History key={reloads} />}
               {route === 'profile' && <Profile key={profileKey.current} />}
               {route === 'data' && <Data key={reloads} />}
