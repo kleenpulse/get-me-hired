@@ -15,6 +15,12 @@ export interface NotesSaver {
   change: (text: string) => void;
   /** Saves now if the text differs from what is saved. True when it saved. */
   flush: () => boolean;
+  /**
+   * Like flush, but through `saveNow`, which writes to storage at once: for the page
+   * being hidden or closed, when there may be no render to save in. Only from a DOM
+   * event, never from inside React's render or an effect cleanup.
+   */
+  flushNow: () => boolean;
   /** The notes saved on the lead changed (an import, another tab): what "unchanged" means now. */
   saved: (notes: string) => void;
   /** Saves now if needed, and stops the timer. The card is going away. */
@@ -26,7 +32,12 @@ export interface Timers {
   clear: (id: number) => void;
 }
 
-export function createNotesSaver(save: (notes: string) => void, initial: string, timers: Timers): NotesSaver {
+export function createNotesSaver(
+  save: (notes: string) => void,
+  initial: string,
+  timers: Timers,
+  saveNow: (notes: string) => void = save,
+): NotesSaver {
   let text = initial;
   let stored = cleanNotes(initial);
   let timer: number | null = null;
@@ -36,14 +47,15 @@ export function createNotesSaver(save: (notes: string) => void, initial: string,
     timer = null;
   };
 
-  const flush = () => {
+  const flushWith = (write: (notes: string) => void) => {
     stop();
     const next = cleanNotes(text);
     if (next === stored) return false;
     stored = next;
-    save(next);
+    write(next);
     return true;
   };
+  const flush = () => flushWith(save);
 
   return {
     change: (next) => {
@@ -52,6 +64,7 @@ export function createNotesSaver(save: (notes: string) => void, initial: string,
       timer = timers.set(flush, NOTES_SAVE_DELAY_MS);
     },
     flush,
+    flushNow: () => flushWith(saveNow),
     saved: (notes) => {
       stored = notes;
       text = notes;

@@ -89,6 +89,11 @@ interface Actions {
   setStatus: (key: string, status: LeadStatus, options?: SetStatusOptions) => MoveRecord | null;
   /** Saves the user's notes on a lead (FR-6.7), cleaned and capped. They never go into a hunt. */
   setNotes: (key: string, notes: string) => void;
+  /**
+   * The same, written to storage at once (flushSync, then the write), for a page being
+   * hidden or closed. Only from a DOM event, never from React's render or a cleanup.
+   */
+  saveNotesNow: (key: string, notes: string) => void;
   /** Undoes a move within its 10 seconds (FR-6.13). False when the lead changed since, so it can't. */
   undoStatus: (move: MoveRecord) => boolean;
   /** Saves the profile, cleaned first, so what is saved is what `profile.md` can carry. */
@@ -696,6 +701,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unmarkEmailed: (key, personIndex) => update(key, (lead, moment) => unmarkEmailed(lead, personIndex, moment)),
       // A functional update on the data as it is now, so notes typed while another tab's data was read in land on it.
       setNotes: (key, notes) => setData((current) => withNotes(current, key, notes)),
+      saveNotesNow: (key, notes) => void commit((current) => withNotes(current, key, notes)),
       markFollowupSent: (key, personIndex) =>
         update(key, (lead, moment) => markFollowupSent(lead, personIndex, localDate(moment))),
       setStatus: (key, status, options) => {
@@ -888,7 +894,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setData(fresh);
       },
     };
-  }, [startHunt, tabSync, takeKeys]);
+  }, [startHunt, tabSync, takeKeys, commit]);
 
   const state = useMemo<AppState>(
     () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, keyProviders, hunt, actions }),

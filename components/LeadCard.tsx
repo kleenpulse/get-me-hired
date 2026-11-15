@@ -294,6 +294,11 @@ function NotesBlock({ lead }: { lead: Lead }) {
       },
       lead.notes,
       { set: (run, ms) => window.setTimeout(run, ms), clear: (timer) => window.clearTimeout(timer) },
+      // The page is going away: write at once, there may be no render left to save in.
+      (notes) => {
+        lastSaved.current = notes;
+        actions.saveNotesNow(key, notes);
+      },
     );
   }
 
@@ -306,7 +311,7 @@ function NotesBlock({ lead }: { lead: Lead }) {
 
   useEffect(() => {
     mounted.current = true;
-    const onHide = () => saver.current?.flush();
+    const onHide = () => saver.current?.flushNow();
     window.addEventListener('pagehide', onHide);
     return () => {
       mounted.current = false;
