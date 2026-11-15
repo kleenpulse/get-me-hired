@@ -20,7 +20,7 @@ import { normaliseUrl } from '@/core/lead-key';
 import { leadToRow, rowToLead } from '@/core/lead-row';
 import { LEAD_STATUSES, parseLeadsCsv, writeLeadsCsv } from '@/core/leads-csv';
 import type { Cadence } from '@/core/lifecycle';
-import { isValidCadence, isValidDailyTarget, isValidMonthlyCap, MONTHLY_CAP_RANGE } from '@/core/settings-bounds';
+import { isValidCadence, isValidDailyTarget, isValidMonthlyCap, isValidRetentionDays, MONTHLY_CAP_RANGE } from '@/core/settings-bounds';
 import { looksLikeProfileMd, readProfileMd, writeProfileMd, type Profile } from '@/core/profile';
 import { isProviderId } from '@/core/providers';
 import { readZip, writeZip, ZipError, type Inflate, type ZipFile } from '@/core/zip';
@@ -63,6 +63,8 @@ interface RunExtras {
   provider: string | null;
   problem: string | null;
   report_name: string | null;
+  /** True when the report was deleted under retention (FR-9.7). */
+  report_expired?: boolean;
   /** The run's cost at the list price in US dollars, for the monthly cap. `null` when the model's price isn't known. */
   list_cost?: number | null;
   unreported?: number;
@@ -71,7 +73,7 @@ interface RunExtras {
 interface Extras {
   format_version: number;
   app_version: string;
-  settings: { daily_target: number; cadence: Cadence; monthly_cap: number; run_on_open: boolean; sources: SourceSwitches };
+  settings: { daily_target: number; cadence: Cadence; monthly_cap: number; run_on_open: boolean; sources: SourceSwitches; retention_days: number };
   leads: Record<string, LeadExtras>;
   runs: RunExtras[];
   do_not_contact: string[];
@@ -87,7 +89,7 @@ export function backupFiles(data: AppData): ZipFile[] {
   const extras: Extras = {
     format_version: FORMAT_VERSION,
     app_version: APP_VERSION,
-    settings: { daily_target: data.settings.dailyTarget, cadence: data.settings.cadence, monthly_cap: data.settings.monthlyCap, run_on_open: data.settings.runOnOpen, sources: data.settings.sources },
+    settings: { daily_target: data.settings.dailyTarget, cadence: data.settings.cadence, monthly_cap: data.settings.monthlyCap, run_on_open: data.settings.runOnOpen, sources: data.settings.sources, retention_days: data.settings.retentionDays },
     leads: Object.fromEntries(
       leads.map((lead) => [
         lead.key,
@@ -117,6 +119,7 @@ export function backupFiles(data: AppData): ZipFile[] {
       report_name: run.report && run.reportName ? run.reportName : null,
       ...(run.listCost !== undefined ? { list_cost: run.listCost } : {}),
       ...(run.unreported !== undefined ? { unreported: run.unreported } : {}),
+      ...(run.reportExpired ? { report_expired: true } : {}),
     })),
     do_not_contact: data.doNotContact.map(blockEntryText),
   };
@@ -146,7 +149,7 @@ export interface Incoming {
   profile: Profile | null;
   leads: Lead[];
   runs: RunRecord[];
-  settings: { dailyTarget: number; cadence: Cadence; monthlyCap?: number; runOnOpen?: boolean; sources?: SourceSwitches } | null;
+  settings: { dailyTarget: number; cadence: Cadence; monthlyCap?: number; runOnOpen?: boolean; sources?: SourceSwitches; retentionDays?: number } | null;
   /** Rows the lenient reader marked "Needs review". */
   needsReview: number;
   /** The backup's do-not-contact list, each line checked (FR-5.7). */
@@ -255,7 +258,7 @@ function readRun(value: unknown, reports: Map<string, string>): RunRecord | null
     // can cost more than the highest cap, so a bigger figure is not believed either.
     ...(value.list_cost === undefined ? {} : { listCost: isRunCost(value.list_cost) ? value.list_cost : null }),
     ...(Number.isInteger(value.unreported) && (value.unreported as number) >= 0 ? { unreported: value.unreported as number } : {}),
-    ...(report && reportName ? { report, reportName } : {}),
+    ...(report && reportName ? { report, reportName } : value.report_expired === true ? { reportExpired: true } : {}),
   };
 }
 
@@ -277,6 +280,7 @@ function readSettings(value: unknown): Incoming['settings'] {
     ...(typeof value.run_on_open === 'boolean' ? { runOnOpen: value.run_on_open } : {}),
     // Each switch only as a real true or false. Anything else leaves the switches here as they are.
     ...(isSourceSwitches(value.sources) ? { sources: { community: value.sources.community } } : {}),
+    ...(isValidRetentionDays(value.retention_days) ? { retentionDays: value.retention_days } : {}),
   };
 }
 

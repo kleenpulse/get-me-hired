@@ -28,13 +28,16 @@ import {
   DELAY_RANGE,
   isValidDailyTarget,
   isValidMonthlyCap,
+  isValidRetentionDays,
   isWholeIn,
   MONTHLY_CAP_RANGE,
+  RETENTION_RANGE,
 } from '@/core/settings-bounds';
 import { ChoicePills, INPUT } from '@/components/fields';
 import { Banner, Button, Card, cx, IconButton, StatusPill, Tag } from '@/components/ui';
 import { TEXT_SIZES, THEMES } from '../display';
 import { usd } from '../format';
+import { retentionDue } from '../retention';
 import { useApp } from '../state';
 import { strings } from '../strings';
 
@@ -545,6 +548,7 @@ export function Settings() {
         <DayCard />
         <div className="flex flex-col gap-gutter">
           <SourcesCard />
+          <RetentionCard />
           <SpendCard />
           <LookCard />
         </div>
@@ -709,6 +713,66 @@ function DayCard() {
 }
 
 /** FR-10.5: theme and text size, applied at once. */
+/**
+ * FR-9.7: how long people on closed leads, and run reports, are kept (FRD §13.2).
+ * A shorter period clears data at once, so it asks first, like the follow-up rules.
+ */
+function RetentionCard() {
+  const { data, today, actions } = useApp();
+  const r = t.retention;
+  const [text, setText] = useState(String(data.settings.retentionDays));
+  const value = asWhole(text);
+  const ok = isValidRetentionDays(value);
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <Card aria-labelledby="retention-title" className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1 border-b border-hairline pb-4">
+        <h2 id="retention-title" className="type-title">
+          {r.title}
+        </h2>
+        <p className="max-w-[68ch] text-ink-2 type-caption">{r.caption}</p>
+      </div>
+      {/* Saved with a button, not as you type: on the way to 350, "35" would clear data. */}
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!ok || value === data.settings.retentionDays) return;
+          const due = retentionDue(data, today, value);
+          if ((due.leads > 0 || due.reports > 0) && !window.confirm(r.confirm(due.leads, due.reports))) return;
+          actions.updateSettings({ retentionDays: value });
+          setSaved(true);
+        }}
+      >
+        <NumberField
+          label={r.days}
+          help={r.daysHelp(RETENTION_RANGE.min, RETENTION_RANGE.max)}
+          error={ok ? null : r.daysBad(RETENTION_RANGE.min, RETENTION_RANGE.max)}
+          value={text}
+          onChange={(next) => {
+            setText(next);
+            setSaved(false);
+          }}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" disabled={!ok || value === data.settings.retentionDays}>
+            {r.save}
+          </Button>
+          <p role="status" className="text-ink-2 type-caption">
+            {saved ? r.saved : ''}
+          </p>
+        </div>
+      </form>
+      <ul className="flex list-disc flex-col gap-1 pl-5">
+        <li className="max-w-[68ch] text-ink-2 type-caption">{r.what(data.settings.retentionDays)}</li>
+        <li className="max-w-[68ch] text-ink-2 type-caption">{r.blockList}</li>
+        <li className="max-w-[68ch] text-ink-2 type-caption">{r.backups}</li>
+      </ul>
+    </Card>
+  );
+}
+
 /** A source that can't run yet: shown as off, with why, never as a switch that does nothing. */
 function UnavailableSource({ name, why }: { name: string; why: string }) {
   return (

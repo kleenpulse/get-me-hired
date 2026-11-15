@@ -13,6 +13,7 @@ import { strings } from '../strings';
 const t = strings.history;
 
 function RunCard({ run }: { run: RunRecord }) {
+  const retentionDays = useApp().data.settings.retentionDays;
   const [open, setOpen] = useState(false);
   const reportId = useId();
   const fileName = run.reportName ? `${run.sample ? 'sample-' : ''}${run.reportName}` : null;
@@ -47,7 +48,7 @@ function RunCard({ run }: { run: RunRecord }) {
           </pre>
         </>
       ) : (
-        <p className="text-ink-2 type-caption">{t.noReport}</p>
+        <p className="text-ink-2 type-caption">{run.reportExpired ? t.reportExpired(retentionDays) : t.noReport}</p>
       )}
     </Card>
   );

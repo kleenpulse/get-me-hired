@@ -10,6 +10,7 @@ import { nextStepFor } from '@/core/lifecycle';
 import { PROVIDERS } from '@/core/providers';
 import { newGroupOf, type TodayReason } from '@/core/ranking';
 import { ageText, freshness, roleText, roundAgeText, shortDate, whyLine } from '@/app/format';
+import { isScrubbed } from '@/app/retention';
 import { useApp } from '@/app/state';
 import { strings } from '@/app/strings';
 import { ContactLabelPill, FreshnessChip, TierChip } from './lead-parts';
@@ -279,7 +280,9 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
   const group = newGroupOf(lead);
   const ring = freshness(lead, nowMs);
   const followupDue = reason?.kind === 'followup';
-  const total = lead.people.length;
+  // People retention removed (FR-9.7) aren't people to write to.
+  const scrubbed = isScrubbed(lead);
+  const total = scrubbed ? 0 : lead.people.length;
   const titleId = useId();
   const [deleted, setDeleted] = useState('');
   const people = useRef<HTMLDivElement>(null);
@@ -352,7 +355,9 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
         <SectionLabel aside={total > 0 ? t.peopleProgress(emailedCount(lead), total) : undefined}>
           {t.peopleLabel}
         </SectionLabel>
-        {total === 0 ? (
+        {scrubbed ? (
+          <p className="text-ink-2 type-body">{t.peopleRemoved}</p>
+        ) : total === 0 ? (
           <p className="type-body">{t.noPeople}</p>
         ) : (
           <ul className="flex flex-col gap-2">

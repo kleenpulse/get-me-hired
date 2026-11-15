@@ -105,6 +105,21 @@ export const strings = {
       damagedKeyCard: 'Your stored keys are damaged. Remove them in the Key passphrase card, then add your key again.',
       lockedKeyCard: 'Your keys are locked. Unlock them in the Key passphrase card to test, add or remove a key.',
     },
+    retention: {
+      title: 'Keeping data',
+      caption: 'How long the app keeps details about people on leads that ended.',
+      save: 'Save',
+      saved: 'Saved.',
+      days: 'Days to keep them',
+      daysHelp: (min: number, max: number) => `A whole number from ${min} to ${max}.`,
+      daysBad: (min: number, max: number) => `Use a whole number from ${min} to ${max}.`,
+      what: (days: number) =>
+        `${days} days after a lead is skipped, rejected or gets no reply, the names and contact details of its people are removed, here and in your saved reports. The company and how it ended stay. Reports older than ${days} days are deleted, and their counts stay in History.`,
+      blockList: 'Your do-not-contact list is kept until you remove an entry.',
+      backups: 'A backup you downloaded earlier still holds what it held then.',
+      confirm: (leads: number, reports: number) =>
+        `With ${leads} ${leads === 1 ? 'closed lead' : 'closed leads'} and ${reports} ${reports === 1 ? 'report' : 'reports'} past this period, they would be cleared now. Go ahead?`,
+    },
     sources: {
       title: 'Sources',
       caption: 'Where a hunt looks. It saves as you choose.',
@@ -491,6 +506,7 @@ export const strings = {
       deleteOnly: 'Delete',
       deleteAndBlock: 'Delete and don’t contact again',
     },
+    peopleRemoved: 'The people on this lead were removed after it ended, as set in Settings → Keeping data.',
     deleted: (name: string) => `${name} was deleted.`,
     deletedAndBlocked: (name: string) => `${name} was deleted and added to your do-not-contact list.`,
     markFollowup: (number: number) => `Mark follow-up ${number} as sent`,
@@ -738,6 +754,7 @@ export const strings = {
     hide: 'Hide report',
     download: 'Download report',
     noReport: 'This hunt ran before reports were added, so it has none.',
+    reportExpired: (days: number) => `Its report was deleted after ${days} days, as set in Settings. The counts stay.`,
   },
 
   dropReasons: {

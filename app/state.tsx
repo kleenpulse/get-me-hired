@@ -54,6 +54,7 @@ import { capAllowsStart, capState, type CapState } from './cap';
 import { addFound, applyBlocks } from './found';
 import { browserLocks, withHuntLock } from './hunt-lock';
 import { unsavedScreen } from './router';
+import { applyRetention } from './retention';
 import { shouldRunOnOpen } from './run-on-open';
 import { anySourceOn, huntSources } from './sources';
 import { TabSync } from './tab-sync';
@@ -92,7 +93,7 @@ interface Actions {
   /** Runs the app in memory only, after the browser refused to store data. */
   continueWithoutSaving: () => void;
   /** Changes settings that save as they're made: the daily target, the cadence, the display (FR-10.2, FR-10.5). */
-  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display' | 'monthlyCap' | 'runOnOpen' | 'sources'>>) => void;
+  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display' | 'monthlyCap' | 'runOnOpen' | 'sources' | 'retentionDays'>>) => void;
   /**
    * Adds entries to the do-not-contact list (FR-5.7) and applies them to saved
    * leads at once: leads on a blocked domain are removed, and blocked people and
@@ -435,9 +436,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (next !== lead) changed = true;
         return next;
       });
-      return changed ? { ...current, leads } : current;
+      const moved = changed ? { ...current, leads } : current;
+      // Retention (FR-9.7) runs with them: on open, when the date changes, and when its period changes.
+      return applyRetention(moved, today, moved.settings.retentionDays);
     });
-  }, [ready, today, data.settings.cadence]);
+  }, [ready, today, data.settings.cadence, data.settings.retentionDays]);
 
   // Theme and text size follow the settings. The fast copy is kept only when saving is on (display.ts).
   const display = data.settings.display;
