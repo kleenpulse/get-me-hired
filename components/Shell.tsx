@@ -1,17 +1,20 @@
 // The app shell: one white frame, with a labelled rail on wide screens and a
 // bottom bar on narrow ones (DESIGN.md, Layout).
 
-import { CalendarCheck, Columns3, Database, Ellipsis, History, Settings, UserRound } from 'lucide-react';
+import { CalendarCheck, Columns3, Database, Ellipsis, FileCheck, History, Settings, UserRound } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link, type Route } from '@/app/router';
 import { strings } from '@/app/strings';
 import { cx, type Icon } from './ui';
 
-const ITEMS: { route: Route; label: string; icon: Icon; pinned?: boolean }[] = [
+// DESIGN.md: the rail is Today, Board, Draft checker, History, then the pinned ones.
+// The bottom bar is Today, Board, Draft checker and More, which holds the rest.
+const ITEMS: { route: Route; label: string; icon: Icon; pinned?: boolean; inMoreOnBar?: boolean }[] = [
   { route: 'today', label: strings.nav.today, icon: CalendarCheck },
   { route: 'board', label: strings.nav.board, icon: Columns3 },
-  { route: 'history', label: strings.nav.history, icon: History },
+  { route: 'drafts', label: strings.nav.drafts, icon: FileCheck },
+  { route: 'history', label: strings.nav.history, icon: History, inMoreOnBar: true },
   { route: 'profile', label: strings.nav.profile, icon: UserRound, pinned: true },
   { route: 'data', label: strings.nav.data, icon: Database, pinned: true },
   { route: 'settings', label: strings.nav.settings, icon: Settings, pinned: true },
@@ -81,10 +84,12 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
         className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-center gap-1 bg-sheet px-2 elev-overlay lg:hidden"
       >
         {/* The bar holds the main items plus "More" (DESIGN.md, Shell). */}
-        {main.map((item) => (
-          <NavItem key={item.route} item={item} active={item.route === route} bar />
-        ))}
-        <MoreMenu items={pinned} route={route} />
+        {main
+          .filter((item) => !item.inMoreOnBar)
+          .map((item) => (
+            <NavItem key={item.route} item={item} active={item.route === route} bar />
+          ))}
+        <MoreMenu items={[...main.filter((item) => item.inMoreOnBar), ...pinned]} route={route} />
       </nav>
     </div>
   );
