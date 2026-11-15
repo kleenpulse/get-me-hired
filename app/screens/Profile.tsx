@@ -235,7 +235,7 @@ export function Profile() {
   // Ask before leaving with unsaved changes (AC-3.2): inside the app, and when the tab closes.
   useEffect(() => {
     if (!dirty) return;
-    const stopGuard = setLeaveGuard(() => window.confirm(t.leave));
+    const stopGuard = setLeaveGuard(() => window.confirm(t.leave), 'profile');
     const onUnload = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener('beforeunload', onUnload);
     return () => {

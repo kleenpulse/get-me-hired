@@ -26,11 +26,20 @@ function routeOf(pathname: string): Route {
  */
 type LeaveGuard = () => boolean;
 let leaveGuard: LeaveGuard | null = null;
+let guardedBy: Route | null = null;
 
-export function setLeaveGuard(guard: LeaveGuard): () => void {
+/** The screen that has unsaved changes right now (it set a leave guard), or `null`. */
+export function unsavedScreen(): Route | null {
+  return leaveGuard ? guardedBy : null;
+}
+
+export function setLeaveGuard(guard: LeaveGuard, screen: Route): () => void {
   leaveGuard = guard;
+  guardedBy = screen;
   return () => {
-    if (leaveGuard === guard) leaveGuard = null;
+    if (leaveGuard !== guard) return;
+    leaveGuard = null;
+    guardedBy = null;
   };
 }
 

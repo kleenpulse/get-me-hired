@@ -801,6 +801,8 @@ export const strings = {
     title: 'Something went wrong',
     storage: 'Your data could not be saved in this browser. Changes you make now may be lost when you close the tab.',
     changedElsewhere: 'This app was changed in another tab, so your last change here wasn’t saved. It now shows the latest.',
+    draftKept:
+      'This app was changed in another tab. Your unsaved profile changes here are kept. Saving them replaces the profile saved there.',
     dismiss: 'Dismiss',
     savingOff:
       'Saving is off, because this browser is not letting Get Me Hired store data. Everything you do here is lost when you close this tab.',
