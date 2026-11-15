@@ -313,7 +313,7 @@ function FolderCard() {
         text:
           result.wrote === 0
             ? f.nothingToSave
-            : f.saved(result.wrote, result.backedUp ? today : null, result.keptAsWritten, result.blockedRows, result.summary?.added ?? 0),
+            : f.saved(result.wrote, result.backedUp ? today : null, result.keptAsWritten, result.blockedRows, result.summary?.added ?? 0, result.heldPeople),
       });
     } catch {
       setMessage({ tone: 'failure', text: f.writeProblems['write-failed'] });

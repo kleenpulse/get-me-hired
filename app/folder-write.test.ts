@@ -7,7 +7,7 @@ import { buildSampleFinds } from '@/core/sample-leads';
 import { parseCsv } from '@/core/csv';
 import { backupFiles } from './backup';
 import { emptyData, FORMAT_VERSION, type AppData, type RunRecord } from './data';
-import { BACKUP_FOLDER, planFolderWrite, writeFolder, type WritableFolder } from './folder-write';
+import { BACKUP_FOLDER, planFolderWrite, pruneBackups, writeFolder, type WritableFolder } from './folder-write';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const DAY = '2026-11-15';
@@ -63,9 +63,18 @@ function memFolder(files: Map<string, Uint8Array>, options: { failOn?: string } 
       }
       return make(`${path}/`, child);
     },
-    async removeEntry(child) {
-      files.delete(`${prefix}${child}`);
-      log.push(`remove ${prefix}${child}`);
+    async removeEntry(child, opts) {
+      const path = `${prefix}${child}`;
+      if (isDir(path)) {
+        // Like the real API: a folder goes only when asked to go with everything in it.
+        if (!opts?.recursive) throw new DOMException('not empty', 'InvalidModificationError');
+        for (const name of [...files.keys()]) if (name.startsWith(`${path}/`)) files.delete(name);
+        for (const dir of [...dirs]) if (dir === path || dir.startsWith(`${path}/`)) dirs.delete(dir);
+        log.push(`remove ${path}/`);
+        return;
+      }
+      files.delete(path);
+      log.push(`remove ${path}`);
     },
     async *values() {
       const seen = new Map<string, 'file' | 'directory'>();
@@ -278,5 +287,93 @@ describe('saving to a linked folder (FR-9.3)', () => {
     expect(result).toMatchObject({ ok: false, problem });
     expect(log).toEqual([]);
     expect(dec(files.get(name))).toBe(text);
+  });
+});
+
+describe('keeping the backups small (FR-9.3)', () => {
+  /** 20 complete day folders, one without the marker, a stray folder and a day-named file. */
+  function backupsFolder() {
+    const files = new Map<string, Uint8Array>([
+      ['leads.csv', enc(csv(fields({})))],
+      ['notes.txt', enc('not ours')],
+      [`${BACKUP_FOLDER}/backups/notes/keep.txt`, enc('a folder someone made')],
+      [`${BACKUP_FOLDER}/backups/manual/.complete`, enc('named like no day')],
+      [`${BACKUP_FOLDER}/backups/2026-01-01/leads.csv`, enc('cut short')],
+      [`${BACKUP_FOLDER}/backups/2026-09-30`, enc('a file, not a folder')],
+      [`${BACKUP_FOLDER}/other/2026-10-01/.complete`, new Uint8Array()],
+    ]);
+    for (let day = 1; day <= 20; day += 1) {
+      const name = `2026-10-${String(day).padStart(2, '0')}`;
+      files.set(`${BACKUP_FOLDER}/backups/${name}/leads.csv`, enc(`backup ${name}`));
+      files.set(`${BACKUP_FOLDER}/backups/${name}/.complete`, new Uint8Array());
+    }
+    return memFolder(files);
+  }
+  /** A whole folder removed under backups/: the only thing pruning does. */
+  const prunes = (entry: string) => /^remove \.get-me-hired\/backups\/[^/]+\/$/.test(entry);
+  const dayFolders = (files: Map<string, Uint8Array>) =>
+    [...new Set([...files.keys()].flatMap((name) => name.match(/^\.get-me-hired\/backups\/([^/]+)\//)?.[1] ?? []))].sort();
+
+  it('deletes exactly the oldest complete day folders past 14, and nothing else', async () => {
+    const { folder, files, log } = backupsFolder();
+    const before = new Map(files);
+    expect(await pruneBackups(folder)).toEqual(['2026-10-06', '2026-10-05', '2026-10-04', '2026-10-03', '2026-10-02', '2026-10-01']);
+    expect(log).toEqual(['2026-10-06', '2026-10-05', '2026-10-04', '2026-10-03', '2026-10-02', '2026-10-01'].map((day) => `remove ${BACKUP_FOLDER}/backups/${day}/`));
+    expect(dayFolders(files)).toEqual(['2026-01-01', ...Array.from({ length: 14 }, (_, i) => `2026-10-${String(i + 7).padStart(2, '0')}`), 'manual', 'notes']);
+    // Everything not in a deleted day folder is byte for byte as it was.
+    for (const [name, data] of before) {
+      if (/^\.get-me-hired\/backups\/2026-10-0[1-6]\//.test(name)) continue;
+      expect(files.get(name)).toEqual(data);
+    }
+  });
+
+  it('prunes only after a save that made a new backup and succeeded', async () => {
+    // The save made today's backup: 21 complete, so the 7 oldest go.
+    const saved = backupsFolder();
+    const result = await writeFolder(saved.folder, appData(), DAY);
+    if (!result.ok) throw new Error(result.problem);
+    expect(result.backedUp).toBe(true);
+    expect(dayFolders(saved.files)).not.toContain('2026-10-07');
+    expect(dayFolders(saved.files)).toContain('2026-10-08');
+    expect(dayFolders(saved.files)).toContain(DAY);
+
+    // A save that fails partway deletes nothing.
+    const failed = backupsFolder();
+    const failing = memFolder(failed.files, { failOn: 'leads.csv' });
+    expect(await writeFolder(failing.folder, appData(), DAY)).toMatchObject({ ok: false, problem: 'write-failed' });
+    expect(failing.log.some(prunes)).toBe(false);
+    expect(dayFolders(failed.files)).toContain('2026-10-01');
+
+    // A save on a day that already has its backup makes no new one, so it deletes nothing either.
+    const today = backupsFolder();
+    today.files.set(`${BACKUP_FOLDER}/backups/${DAY}/leads.csv`, enc('this morning'));
+    today.files.set(`${BACKUP_FOLDER}/backups/${DAY}/.complete`, new Uint8Array());
+    const again = await writeFolder(today.folder, appData(), DAY);
+    if (!again.ok) throw new Error(again.problem);
+    expect(again.backedUp).toBe(false);
+    expect(again.wrote).toBeGreaterThan(0);
+    expect(today.log.some(prunes)).toBe(false);
+    expect(dayFolders(today.files)).toContain('2026-10-01');
+  });
+
+  it('says when kept rows may still hold people deleted here', async () => {
+    // The skill's row names two people; this browser deleted one of them.
+    const row = fields({ status: 'maybe-later', people: 'Ada Obi (Founder); Femi Ade (CTO)', contacts: 'ada@kettle.example; femi@kettle.example', contact_confidence: 'guess; guess' });
+    const { folder, files } = memFolder(new Map([['leads.csv', enc(csv(row))]]));
+    const parsed = parseLeadsCsv(csv(row));
+    if (!parsed.ok) throw new Error('bad csv');
+    const lead = rowToLead(parsed.leads[0]!);
+    const erased = { ...lead, people: lead.people.filter((person) => person.name !== 'Femi Ade') };
+    const result = await writeFolder(folder, { ...emptyData(), leads: [erased] }, DAY);
+    if (!result.ok) throw new Error(result.problem);
+    expect(result.keptAsWritten).toBe(1);
+    expect(result.heldPeople).toBe(1);
+    expect(dec(files.get('leads.csv'))).toContain('Femi Ade');
+
+    // The same row, with nobody deleted, isn't counted.
+    const untouched = memFolder(new Map([['leads.csv', enc(csv(row))]]));
+    const plain = await writeFolder(untouched.folder, { ...emptyData(), leads: [lead] }, DAY);
+    if (!plain.ok) throw new Error(plain.problem);
+    expect(plain.heldPeople).toBe(0);
   });
 });
