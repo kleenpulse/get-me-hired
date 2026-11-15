@@ -1,18 +1,22 @@
 import { TriangleAlert } from 'lucide-react';
 import { MotionConfig } from 'motion/react';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
+import { ScreenBoundary } from '@/components/ScreenBoundary';
 import { Shell } from '@/components/Shell';
 import { Banner, Button, Card } from '@/components/ui';
 import { useRoute, type Route } from './router';
-import { Board } from './screens/Board';
-import { Data } from './screens/Data';
-import { History } from './screens/History';
-import { Profile } from './screens/Profile';
-import { Settings } from './screens/Settings';
 import { Today } from './screens/Today';
 import { Welcome } from './screens/Welcome';
 import { useApp } from './state';
 import { strings } from './strings';
+
+// Today and Welcome load with the app. The other screens load the first time
+// they're opened, so the first page load stays small.
+const Board = lazy(() => import('./screens/Board').then((module) => ({ default: module.Board })));
+const History = lazy(() => import('./screens/History').then((module) => ({ default: module.History })));
+const Profile = lazy(() => import('./screens/Profile').then((module) => ({ default: module.Profile })));
+const Data = lazy(() => import('./screens/Data').then((module) => ({ default: module.Data })));
+const Settings = lazy(() => import('./screens/Settings').then((module) => ({ default: module.Settings })));
 
 const TITLES: Record<Route, string> = {
   today: strings.nav.today,
@@ -94,11 +98,21 @@ export function App() {
             </div>
           )}
           {route === 'today' && <Today />}
-          {route === 'board' && <Board />}
-          {route === 'history' && <History />}
-          {route === 'profile' && <Profile />}
-          {route === 'data' && <Data />}
-          {route === 'settings' && <Settings />}
+          <ScreenBoundary resetKey={route}>
+            <Suspense
+              fallback={
+                <p role="status" className="px-2 pt-2 text-ink-2 type-body">
+                  {strings.loadingScreen}
+                </p>
+              }
+            >
+              {route === 'board' && <Board />}
+              {route === 'history' && <History />}
+              {route === 'profile' && <Profile />}
+              {route === 'data' && <Data />}
+              {route === 'settings' && <Settings />}
+            </Suspense>
+          </ScreenBoundary>
         </Shell>
       )}
     </MotionConfig>

@@ -28,6 +28,7 @@ export const strings = {
   appName: 'Get Me Hired',
   skipToContent: 'Skip to the main content',
   loading: 'Loading your leads…',
+  loadingScreen: 'Loading…',
   unknown: 'unknown',
 
   nav: {
@@ -711,6 +712,11 @@ export const strings = {
     storage: 'Your data could not be saved in this browser. Changes you make now may be lost when you close the tab.',
     savingOff:
       'Saving is off, because this browser is not letting Get Me Hired store data. Everything you do here is lost when you close this tab.',
+    screen: {
+      title: 'This screen could not be opened',
+      body: 'You may be offline, or Get Me Hired was updated since this tab opened. Your data is safe. Reload the page to get the newest version.',
+      action: 'Reload the page',
+    },
     load: {
       broken: {
         title: 'Your saved data could not be opened',

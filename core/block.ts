@@ -94,8 +94,8 @@ export const SHARED_DOMAINS: readonly string[] = [
   'docs.google.com',
 ];
 
-/** Free-mail brands that run a host per country: yahoo.co.uk, hotmail.fr, outlook.de, live.ca and so on. */
-const SHARED_BRANDS = /^(?:yahoo|hotmail|outlook|live|gmx|aol|yandex)\.[a-z]{2,3}(?:\.[a-z]{2})?$/;
+/** Free-mail brands that run a host per country: yahoo.co.uk, hotmail.fr, outlook.de, live.ca and so on, and their subdomains. */
+const SHARED_BRANDS = /(?:^|\.)(?:yahoo|hotmail|outlook|live|gmx|aol|yandex)\.[a-z]{2,3}(?:\.[a-z]{2})?$/;
 
 export function isSharedDomain(domain: string): boolean {
   const bare = bareDomain(domain);
