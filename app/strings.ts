@@ -27,6 +27,13 @@ const missingWords = (fields: readonly RequiredField[]) => listWords(fields.map(
 
 export const strings = {
   appName: 'Get Me Hired',
+  pwa: {
+    name: 'Get Me Hired',
+    shortName: 'Get Me Hired',
+    description: 'Finds about 20 people worth emailing each day. Your data stays in your browser.',
+  },
+  offline: 'You’re offline. You can read and update leads, but hunts need a connection.',
+  update: { ready: 'A new version of the app is ready.', reload: 'Reload' },
   skipToContent: 'Skip to the main content',
   loading: 'Loading your leads…',
   loadingScreen: 'Loading…',
@@ -306,6 +313,7 @@ export const strings = {
       'This version reads the Hacker News hiring thread and checks each opening against your profile. Fresh posts and funding news come later.',
     sampleHuntNote: 'A sample hunt searches nothing and sends nothing to any service.',
     sourcesOff: 'Every source is off. Turn one on in Settings.',
+    offline: 'You’re offline. Hunts need a connection.',
     interrupted: {
       body: (found: number, cost: string | null) =>
         [

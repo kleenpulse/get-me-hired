@@ -57,6 +57,7 @@ import { browserLocks, HUNT_LOCK, withHuntLock } from './hunt-lock';
 import { settleInterrupted } from './interrupted';
 import { unsavedScreen } from './router';
 import { withNotes } from './notes-saver';
+import { useOnline } from './online';
 import { applyRetention } from './retention';
 import { NO_FILTER, type BoardFilter } from './board-filter';
 import { shouldRunOnOpen } from './run-on-open';
@@ -305,6 +306,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [changedElsewhere, setChangedElsewhere] = useState<AppState['changedElsewhere']>(false);
   const [reloads, setReloads] = useState(0);
   const [boardFilter, setBoardFilter] = useState<BoardFilter>(NO_FILTER);
+  const online = useOnline();
   const [interruptedHunt, setInterruptedHunt] = useState<HuntCheckpoint | null>(null);
 
   // Keeps this tab in step with the others: ordered writes over the right revision, and
@@ -702,8 +704,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Turning the setting on later doesn't start a hunt until the next open.
   const openChecked = useRef(false);
   useEffect(() => {
-    // Locked keys: wait. Run on open checks again once this tab is unlocked (FR-10.4).
-    if (!ready || openChecked.current || keyLock === 'locked') return;
+    // Locked keys, or offline: wait. Run on open checks again once unlocked (FR-10.4) or back
+    // online: a hunt started offline would only fail, and its run would use up the day.
+    if (!ready || openChecked.current || keyLock === 'locked' || !online) return;
     openChecked.current = true;
     if (loadFailed || savingOff) return;
     const go = () => {
@@ -714,7 +717,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const page = document as Document & { prerendering?: boolean };
     if (page.prerendering) document.addEventListener('prerenderingchange', go, { once: true });
     else go();
-  }, [ready, loadFailed, savingOff, keyLock, keyProviders, startHunt]);
+  }, [ready, loadFailed, savingOff, keyLock, keyProviders, startHunt, online]);
 
   // A saved hunt in progress, with no hunt running here and no tab holding the hunt lock,
   // stopped partway (FR-4.15). Without the Web Locks API it can't be told apart, so it counts.
