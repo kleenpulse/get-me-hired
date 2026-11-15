@@ -148,6 +148,15 @@ describe('profile.md (FR-3.5)', () => {
     expect(readProfileMd(writeProfileMd(awkward))).toEqual(awkward);
   });
 
+  it('drops sentence punctuation after a link the same way when saving and when reading', () => {
+    const typed: Profile = { ...FULL, proofLinks: [{ url: 'https://a.example/x.', line: 'trail dot' }] };
+    const clean = cleanProfile(typed);
+    expect(clean.proofLinks).toEqual([{ url: 'https://a.example/x', line: 'trail dot' }]);
+    expect(readProfileMd(writeProfileMd(clean))).toEqual(clean);
+    const text = '## Five questions\n\n5. **Proof links:**\n   - https://z.example. — the thing\n';
+    expect(readProfileMd(text).proofLinks).toEqual([{ url: 'https://z.example', line: 'the thing' }]);
+  });
+
   it('reads proof links people write by hand', () => {
     const text = `## Five questions
 

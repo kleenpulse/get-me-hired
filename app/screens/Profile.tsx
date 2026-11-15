@@ -218,7 +218,7 @@ function Facts({ facts, onChange }: { facts: string[]; onChange: (facts: string[
 }
 
 export function Profile() {
-  const { data, actions } = useApp();
+  const { data, savingOff, actions } = useApp();
   const saved = data.profile ?? emptyProfile();
   const [draft, setDraft] = useState<ProfileData>(saved);
   const [showErrors, setShowErrors] = useState(false);
@@ -254,7 +254,7 @@ export function Profile() {
     actions.saveProfile(clean);
     setDraft(clean);
     setShowErrors(false);
-    setMessage({ text: t.saved, tone: 'info' });
+    setMessage({ text: savingOff ? t.savedForNow : t.saved, tone: 'info' });
   };
 
   const open = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -414,7 +414,7 @@ export function Profile() {
       <div className="sticky bottom-[calc(64px+var(--gutter))] z-10 lg:bottom-gutter">
         <Card as="div" className="flex items-center justify-between gap-3 border border-hairline elev-overlay">
           <p role="status" className={cx('min-w-0 flex-1 type-body', message?.tone === 'failure' && 'text-critical')}>
-            {message?.text ?? (dirty ? t.unsaved : t.allSaved)}
+            {message?.text ?? (dirty ? t.unsaved : savingOff ? t.allSavedForNow : t.allSaved)}
           </p>
           <Button variant="primary" onClick={save} disabled={!dirty && data.profile !== null} className="shrink-0">
             {t.save}

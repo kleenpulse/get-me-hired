@@ -14,11 +14,13 @@ function DeleteEverything() {
   const { actions } = useApp();
   const dialog = useRef<HTMLDialogElement>(null);
   const [typed, setTyped] = useState('');
+  const [failed, setFailed] = useState(false);
   const d = t.deleteAll;
 
   const close = () => {
     dialog.current?.close();
     setTyped('');
+    setFailed(false);
   };
 
   return (
@@ -32,7 +34,10 @@ function DeleteEverything() {
       <dialog
         ref={dialog}
         aria-labelledby="delete-title"
-        onClose={() => setTyped('')}
+        onClose={() => {
+          setTyped('');
+          setFailed(false);
+        }}
         className="m-auto w-[min(440px,calc(100vw-2*var(--gutter)))] rounded-card bg-sheet p-card text-foreground elev-overlay"
       >
         <form
@@ -40,12 +45,17 @@ function DeleteEverything() {
           onSubmit={(event) => {
             event.preventDefault();
             if (typed !== d.word) return;
-            void actions.deleteEverything().then(close);
+            actions.deleteEverything().then(close, () => setFailed(true));
           }}
         >
           <h3 id="delete-title" className="type-title">
             {d.confirmTitle}
           </h3>
+          {failed && (
+            <p role="alert" className="rounded-tile bg-critical-soft px-4 py-3 type-body">
+              {d.failed}
+            </p>
+          )}
           <p className="type-body">{d.confirmBody}</p>
           <label className="flex flex-col gap-1.5">
             <span className="type-label">{d.typeLabel}</span>
@@ -71,7 +81,7 @@ function DeleteEverything() {
 }
 
 export function Data() {
-  const { data, persistence, actions } = useApp();
+  const { data, persistence, savingOff, actions } = useApp();
   const browser = browserName(navigator.userAgent);
 
   return (
@@ -83,14 +93,20 @@ export function Data() {
       <div className="grid gap-gutter md:grid-cols-2 md:items-start">
         <Card className="flex flex-col gap-3">
           <h2 className="type-title">{t.storage.title}</h2>
-          <p className="max-w-[68ch] type-body">{t.storage.body(browser)}</p>
-          <Banner
-            tone={persistence === 'granted' || persistence === 'unknown' ? 'info' : 'warning'}
-            icon={persistence === 'granted' || persistence === 'unknown' ? HardDrive : TriangleAlert}
-          >
-            {t.storage.persistent[persistence]}
-          </Banner>
-          <p className="max-w-[68ch] text-ink-2 type-caption">{t.storage.warning}</p>
+          {savingOff ? (
+            <p className="max-w-[68ch] type-body">{t.storage.savingOff(browser)}</p>
+          ) : (
+            <>
+              <p className="max-w-[68ch] type-body">{t.storage.body(browser)}</p>
+              <Banner
+                tone={persistence === 'granted' || persistence === 'unknown' ? 'info' : 'warning'}
+                icon={persistence === 'granted' || persistence === 'unknown' ? HardDrive : TriangleAlert}
+              >
+                {t.storage.persistent[persistence]}
+              </Banner>
+              <p className="max-w-[68ch] text-ink-2 type-caption">{t.storage.warning}</p>
+            </>
+          )}
         </Card>
 
         <div className="flex flex-col gap-gutter">
