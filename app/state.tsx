@@ -12,10 +12,10 @@ import {
   type ReactNode,
 } from 'react';
 import { localDate } from '@/core/dates';
-import type { HuntProgress, HuntResult, HuntRunner } from '@/core/hunt';
+import { waitingSteps, type HuntProgress, type HuntResult, type HuntRunner, type HuntStep } from '@/core/hunt';
 import type { Lead, LeadStatus } from '@/core/lead';
 import { cleanProfile, missingFields, type Profile } from '@/core/profile';
-import { PROVIDER_IDS, PROVIDERS, type ProviderId } from '@/core/providers';
+import { classifyProviderError, PROVIDER_IDS, PROVIDERS, type ProviderId } from '@/core/providers';
 import {
   applyAutomaticMoves,
   markEmailed,
@@ -39,6 +39,7 @@ import {
   type Persistence,
   type StoredKeys,
 } from './storage';
+import { reportFileName, writeRunReport } from './run-report';
 import { strings } from './strings';
 
 export interface HuntState {
@@ -155,18 +156,46 @@ function huntMessage(result: HuntResult, added: number, provider: ProviderId | n
 }
 
 /** Adds the leads a hunt found. A lead whose key already exists changes nothing (FR-6.8). */
-function addFound(data: AppData, result: HuntResult, now: Date, sample: boolean): AppData {
+function addFound(data: AppData, result: HuntResult, now: Date, sample: boolean, provider: ProviderId | null): AppData {
   const known = new Set(data.leads.map((lead) => lead.key));
   const fresh = result.leads.filter((lead) => !known.has(lead.key));
+  // A lead found again counts as a duplicate in the report, never as kept twice (FR-6.8).
+  const again = result.leads
+    .filter((lead) => known.has(lead.key))
+    .map((lead) => ({ company: lead.company, reason: 'duplicate' as const, sourceUrl: lead.sources[0]?.url ?? '' }));
+  const dropped = [...result.dropped, ...again];
+  const date = localDate(now);
+  const leads = [...data.leads, ...fresh];
+  // Sample hunts are numbered apart, since they are never exported with real ones (FR-1.4).
+  const earlier = data.runs.filter((run) => run.date === date && run.sample === sample).length;
+  const report = writeRunReport({
+    date,
+    status: result.status,
+    ...(result.problem ? { problem: result.problem } : {}),
+    sample,
+    provider: sample ? null : provider,
+    kept: fresh,
+    dropped,
+    steps: result.steps,
+    failedSources: result.failedSources ?? [],
+    unread: result.unread ?? 0,
+    usage: result.usage ?? null,
+    leads,
+    cadence: data.settings.cadence,
+  });
   const run: RunRecord = {
     at: now.toISOString(),
-    date: localDate(now),
+    date,
     status: result.status,
     kept: fresh.length,
-    dropped: result.dropped,
+    dropped,
     sample,
+    provider: sample ? null : provider,
+    ...(result.problem ? { problem: result.problem } : {}),
+    report,
+    reportName: reportFileName(date, earlier),
   };
-  return { ...data, leads: [...data.leads, ...fresh], runs: [...data.runs, run] };
+  return { ...data, leads, runs: [...data.runs, run] };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -312,7 +341,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const finishedAt = new Date();
         const known = new Set(latest.current.leads.map((lead) => lead.key));
         const added = result.leads.filter((lead) => !known.has(lead.key)).length;
-        setData((current) => addFound(current, result, finishedAt, sample));
+        setData((current) => addFound(current, result, finishedAt, sample, provider));
         setHunt((current) => ({
           ...current,
           running: false,
@@ -321,12 +350,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
           failed: result.status === 'failed',
         }));
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        // The hunt couldn't even load (offline, say). It still gets a run and a report (AC-8.1).
+        const problem = classifyProviderError(error);
+        // The same rule as real-hunt.ts: search steps and switched-off stages say so, the rest failed.
+        const steps = waitingSteps().map((step): HuntStep =>
+          step.id === 'posts' || step.id === 'freshness'
+            ? { ...step, state: 'skipped', skipReason: 'needs-search' }
+            : step.id === 'funding'
+              ? { ...step, state: 'skipped', skipReason: 'switched-off' }
+              : { ...step, state: 'failed' },
+        );
+        setData((current) => addFound(current, { status: 'failed', problem, leads: [], dropped: [], steps }, new Date(), sample, provider));
         setHunt((current) => ({
           ...current,
           running: false,
           failed: true,
-          message: strings.hunt.failed('unknown', providerName(provider), 0),
+          message: strings.hunt.failed(problem, providerName(provider), 0),
         }));
       })
       .finally(() => {

@@ -34,9 +34,11 @@ export const strings = {
     label: 'Main',
     today: 'Today',
     board: 'Board',
+    history: 'History',
     profile: 'Profile',
     data: 'Data',
     settings: 'Settings',
+    more: 'More',
   },
 
   settings: {
@@ -258,27 +260,31 @@ export const strings = {
     tally: (kept: number, dropped: number) => `Kept ${kept} · Dropped ${dropped}`,
     cancel: 'Cancel',
     finished: (kept: number) => `Hunt finished. ${plural(kept, 'new lead', 'new leads')} added.`,
-    cancelled: (kept: number) => `Hunt cancelled. ${plural(kept, 'lead', 'leads')} found so far were kept.`,
+    cancelled: (kept: number) => `Hunt cancelled. ${plural(kept, 'lead', 'leads')} found so far ${kept === 1 ? 'was' : 'were'} kept.`,
     nothingNew: 'Hunt finished. Nothing new today.',
     yourProvider: 'your AI provider',
+    seeReport: 'See the report',
     failedSources: (hosts: readonly string[]) => `We couldn't search ${listWords(hosts)} today.`,
     unread: (count: number) =>
       `We couldn't check ${plural(count, 'possible lead', 'possible leads')} this time. Run the hunt again later to try them.`,
-    failed: (problem: KeyProblem | 'hn-down', provider: string, kept: number) => {
-      const why =
-        problem === 'hn-down'
-          ? "Hacker News isn't answering right now. Try again later."
-          : problem === 'rate-limited'
-            ? `${provider} asked us to slow down. Try again in a few minutes.`
-            : problem === 'wrong-key'
-              ? `This key didn't work with ${provider}. Check it in Settings.`
-              : problem === 'no-credit'
-                ? `Your ${provider} account is out of credit.`
-                : problem === 'no-connection'
-                  ? `We couldn't reach ${provider}. Check your internet connection.`
-                  : `Something went wrong with ${provider}. Try again.`;
-      return kept > 0 ? `The hunt stopped. ${why} ${plural(kept, 'lead', 'leads')} found before it stopped were kept.` : `The hunt stopped. ${why}`;
-    },
+    /** Why a hunt stopped, in one or two sentences. Shared by the banner and the run report. */
+    failedWhy: (problem: KeyProblem | 'hn-down', provider: string) =>
+      problem === 'hn-down'
+        ? "Hacker News isn't answering right now. Try again later."
+        : problem === 'rate-limited'
+          ? `${provider} asked us to slow down. Try again in a few minutes.`
+          : problem === 'wrong-key'
+            ? `This key didn't work with ${provider}. Check it in Settings.`
+            : problem === 'no-credit'
+              ? `Your ${provider} account is out of credit.`
+              : problem === 'no-connection'
+                ? `We couldn't reach ${provider}. Check your internet connection.`
+                : `Something went wrong with ${provider}. Try again.`,
+    keptBeforeStop: (kept: number) => `${plural(kept, 'lead', 'leads')} found before it stopped ${kept === 1 ? 'was' : 'were'} kept.`,
+    failed: (problem: KeyProblem | 'hn-down', provider: string, kept: number) =>
+      [`The hunt stopped.`, strings.hunt.failedWhy(problem, provider), kept > 0 ? strings.hunt.keptBeforeStop(kept) : '']
+        .filter(Boolean)
+        .join(' '),
   },
 
   lead: {
@@ -511,6 +517,80 @@ export const strings = {
       tooBig: 'This file is too big to be a profile.md.',
       unreadable: 'This file could not be read.',
     },
+  },
+
+  /**
+   * The run report (FR-8.1), in the agent skill's `runs/YYYY-MM-DD.md` shape. Its
+   * first 4 headings are the skill's, word for word. The rest are the app's own
+   * additions, recorded in FRD §11.5 as changes the skill should take.
+   */
+  report: {
+    title: (date: string) => `# Hunt: ${date}`,
+    sampleNote: 'Sample hunt: these results are invented, and no service was called.',
+    status: {
+      completed: (kept: number, dropped: number) =>
+        `Completed. ${plural(kept, 'new lead', 'new leads')} kept, ${plural(dropped, 'lead', 'leads')} dropped.`,
+      cancelled: (kept: number, dropped: number) =>
+        `Cancelled. ${plural(kept, 'new lead', 'new leads')} found before it stopped ${kept === 1 ? 'was' : 'were'} kept, ${plural(dropped, 'lead', 'leads')} dropped.`,
+    },
+    headings: {
+      posts: '## Fresh posts',
+      funding: '## Just raised',
+      followups: '## Follow-ups due',
+      dry: '## Dry queries',
+      community: '## Community threads',
+      dropped: '## Dropped, and why',
+      failedSources: "## Couldn't search today",
+      notSearched: '## Not searched',
+      cost: '## Provider and cost',
+    },
+    none: '- None.',
+    opening: (url: string, posted: string) => `- Opening: ${url} (posted ${posted}, from the Hacker News API)`,
+    post: (url: string) => `- Post: ${url}`,
+    round: (company: string, round: string, date: string, url: string) => `### ${company}: ${round} (${date}, ${url})`,
+    readBy: (provider: string) => `- Read by ${provider} from the linked page. Not checked by the app.`,
+    fit: (fit: string) => `- Fit: ${fit}`,
+    contact: (name: string, role: string, email: string, label: string, evidence: string) =>
+      `- Contact: ${name} (${role}). ${email} (${label}, ${evidence})`,
+    noContact: '- Contact: nobody found yet.',
+    hook: (text: string, url: string) => `- Hook: ${text} ${url}`,
+    followup: (company: string, emailedOn: string, number: number) =>
+      `- ${company}: emailed ${emailedOn}, no reply. Follow-up ${number} is due.`,
+    dryStep: {
+      posts: 'Fresh posts: nothing new fit your profile.',
+      funding: 'Funding news: no recent seed round could be confirmed.',
+      community: 'Hacker News hiring thread: nothing new fit your profile.',
+    },
+    dropped: (company: string, reason: string, url: string) => `- ${company}: ${reason}. ${url}`,
+    unread: (count: number) => `- ${plural(count, 'possible lead', 'possible leads')} couldn't be checked this time.`,
+    notSearched: (step: string, reason: string) => `- ${step}: ${reason}.`,
+    provider: (name: string, model: string) => `- Provider: ${name}, model ${model}.`,
+    noProvider: '- Provider: none. A sample hunt calls no service.',
+    calls: (calls: number, inputTokens: string, outputTokens: string) =>
+      `- Model calls: ${calls}. Tokens: ${inputTokens} in, ${outputTokens} out.`,
+    unreported: (count: number) =>
+      `- ${plural(count, 'call', 'calls')} didn't report ${count === 1 ? 'its' : 'their'} tokens, so the figures below leave ${count === 1 ? 'it' : 'them'} out.`,
+    costFree: (provider: string) => `- Cost: nothing, if your key is on ${provider}'s free tier.`,
+    costFreeModel: '- Cost: nothing. This model is free.',
+    costPaid: (amount: string, checkedOn: string) =>
+      `- If your key has billing on, this run cost about ${amount} at the list price. Worked out from the price table dated ${checkedOn}, not read from your bill.`,
+    costUnknown: '- Cost: not known for this model.',
+    costSample: '- Cost: nothing.',
+    stopped: (why: string) => `Stopped. ${why}`,
+    fileName: (date: string, number: number) => `${date}${number > 1 ? `-${number}` : ''}.md`,
+  },
+
+  history: {
+    title: 'History',
+    intro: 'Every hunt, newest first, with its report.',
+    empty: { title: 'No hunts yet', body: 'Each hunt you run saves a report here.' },
+    status: { completed: 'Completed', cancelled: 'Cancelled', failed: 'Stopped' },
+    sample: 'Sample',
+    counts: (kept: number, dropped: number) => `${plural(kept, 'lead', 'leads')} kept · ${dropped} dropped`,
+    show: 'Show report',
+    hide: 'Hide report',
+    download: 'Download report',
+    noReport: 'This hunt ran before reports were added, so it has none.',
   },
 
   dropReasons: {

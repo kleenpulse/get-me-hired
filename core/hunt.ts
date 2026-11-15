@@ -2,6 +2,7 @@
 // sample hunt both speak this, so the screens don't care which one is running.
 
 import type { Lead } from './lead';
+import type { Usage } from './prices';
 import type { KeyProblem } from './providers';
 
 /** The stages of a hunt, in the order they run (FRD §12). */
@@ -59,6 +60,8 @@ export interface HuntResult {
   unread?: number;
   /** Sources that couldn't be searched today, by host name (FR-4.11). The rest of the run still finished. */
   failedSources?: string[];
+  /** Model calls and tokens, summed from the SDK's reports (FR-4.13). */
+  usage?: Usage;
 }
 
 export interface HuntOptions {

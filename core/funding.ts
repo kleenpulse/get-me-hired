@@ -140,6 +140,7 @@ async function readPage(context: StageContext, url: string, ask: string): Promis
       maxRetries: MAX_RETRIES,
       abortSignal: signal,
     });
+    context.addUsage(result.usage);
     const meta = (result.providerMetadata?.google as UrlContextMetadata | undefined)?.urlContextMetadata?.urlMetadata ?? [];
     const retrieved = meta.some(
       (entry) => normaliseUrl(entry.retrievedUrl) === normaliseUrl(url) && entry.urlRetrievalStatus === RETRIEVED,
@@ -163,6 +164,7 @@ async function toJson<S extends ZodType>(context: StageContext, text: string, as
       maxRetries: MAX_RETRIES,
       abortSignal: signal,
     });
+    context.addUsage(result.usage);
     return { kind: 'ok', value: result.output as output<S> };
   } catch (error) {
     return ended(context, error);

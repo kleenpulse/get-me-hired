@@ -6,6 +6,7 @@ import { Banner, Button, Card } from '@/components/ui';
 import { useRoute, type Route } from './router';
 import { Board } from './screens/Board';
 import { Data } from './screens/Data';
+import { History } from './screens/History';
 import { Profile } from './screens/Profile';
 import { Settings } from './screens/Settings';
 import { Today } from './screens/Today';
@@ -16,6 +17,7 @@ import { strings } from './strings';
 const TITLES: Record<Route, string> = {
   today: strings.nav.today,
   board: strings.nav.board,
+  history: strings.nav.history,
   profile: strings.nav.profile,
   data: strings.nav.data,
   settings: strings.nav.settings,
@@ -93,6 +95,7 @@ export function App() {
           )}
           {route === 'today' && <Today />}
           {route === 'board' && <Board />}
+          {route === 'history' && <History />}
           {route === 'profile' && <Profile />}
           {route === 'data' && <Data />}
           {route === 'settings' && <Settings />}

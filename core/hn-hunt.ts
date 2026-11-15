@@ -279,6 +279,7 @@ export async function runHnStage(context: StageContext): Promise<StageEnd> {
         maxRetries: MAX_RETRIES,
         abortSignal: signal,
       });
+      context.addUsage(result.usage);
       const seen = new Set<string>();
       for (const verdict of result.output.leads as Verdict[]) {
         const comment = byId.get(verdict.commentId);

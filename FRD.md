@@ -489,6 +489,7 @@ To keep both tools in step, the skill needs these changes. Track them as one iss
 2. Link community-thread openings to the exact comment.
 3. Write `contacts` and `contact_confidence` as item-for-item lists, using `method` for DM, form and apply items.
 4. Use the `~` prefix for approximate dates and ages.
+5. Add the run report sections the app writes after the skill's 4 (Fresh posts, Just raised, Follow-ups due, Dry queries): "Community threads", "Dropped, and why", "Couldn't search today", "Not searched", and "Provider and cost". Write "checked from the URL" only when the age was decoded from the URL, and mark facts a provider read as "Read by <provider> from the linked page. Not checked by the app."
 
 ## 12. Hunt limits per run
 
