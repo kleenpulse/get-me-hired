@@ -297,7 +297,16 @@ export async function readBackup(bytes: Uint8Array, inflate: Inflate): Promise<R
     if (/compression/.test(error.message)) return { ok: false, problem: 'unsupported' };
     return { ok: false, problem: 'damaged' };
   }
+  return readBackupFiles(files);
+}
 
+/**
+ * Reads the skill's files, from a backup ZIP or a linked folder (FR-9.3): every
+ * value is checked the same way, whichever it came from. Only the exact paths
+ * of `isBackupPath` count.
+ */
+export function readBackupFiles(given: readonly ZipFile[]): ReadResult {
+  const files = given.filter((file) => isBackupPath(file.name));
   const text = (name: string) => {
     const file = files.find((entry) => entry.name === name);
     return file ? decoder.decode(file.data) : null;

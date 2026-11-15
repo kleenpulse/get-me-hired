@@ -2,12 +2,14 @@
 // the do-not-contact list (FR-5.7), sample mode, and "Delete everything"
 // behind a typed confirmation (FR-9.5).
 
-import { Ban, Check, Download, FileUp, HardDrive, TriangleAlert, X } from 'lucide-react';
-import { useId, useRef, useState, type ChangeEvent } from 'react';
+import { Ban, Check, Download, FileUp, FolderOpen, HardDrive, TriangleAlert, X } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { applyBlockList, readTypedEntry, sameEntry, type BlockEntry } from '@/core/block';
 import { INPUT } from '@/components/fields';
 import { Banner, Button, Card, IconButton } from '@/components/ui';
 import type { Incoming } from '../backup';
+import { canLinkFolder, pickFolder, readFolder, type FolderAccess, type LinkedFolder } from '../folder';
+import { clearFolderHandle, loadFolderHandle, saveFolderHandle } from '../storage';
 import { browserName, shortDate } from '../format';
 import { useApp } from '../state';
 import { strings } from '../strings';
@@ -144,14 +146,211 @@ function BlockCard() {
 /** A backup is a few megabytes at most. A bigger file is refused before it is read. */
 const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
 
+type Message = { tone: 'info' | 'failure'; text: string };
+
+/**
+ * "Bring in this backup?": the same check and merge for a backup ZIP and a linked
+ * folder (FR-9.2, FR-9.3). This browser's status, marks and notes win.
+ */
+function ImportConfirm({
+  ref,
+  pending,
+  words,
+  onClose,
+  onDone,
+}: {
+  ref: React.RefObject<HTMLDialogElement | null>;
+  pending: Incoming | null;
+  /** The title and the profile choice, worded for a backup or a folder. */
+  words: { confirmTitle: string; replaceProfile: string };
+  onClose: () => void;
+  onDone: (message: Message) => void;
+}) {
+  const { data, actions } = useApp();
+  const [replaceProfile, setReplaceProfile] = useState(false);
+
+  const bringIn = async () => {
+    if (!pending) return;
+    const summary = await actions.importBackup(pending, replaceProfile);
+    ref.current?.close();
+    onDone({
+      tone: 'info',
+      text: [b.done(summary.added, summary.alreadyHere, summary.runsAdded), b.profileDone[summary.profile], summary.needsReview > 0 ? b.reviewDone(summary.needsReview) : '']
+        .filter(Boolean)
+        .join(' '),
+    });
+  };
+
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby="import-title"
+      onClose={() => {
+        setReplaceProfile(false);
+        onClose();
+      }}
+      className="m-auto w-[min(480px,calc(100vw-2*var(--gutter)))] rounded-card border border-hairline bg-sheet p-card text-foreground elev-overlay"
+    >
+      {pending && (
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void bringIn();
+          }}
+        >
+          <h3 id="import-title" className="type-title">
+            {words.confirmTitle}
+          </h3>
+          <p className="type-body">{b.contents(pending.leads.length, pending.runs.filter((run) => run.report).length, pending.profile !== null)}</p>
+          <p className="max-w-[68ch] text-ink-2 type-caption">{b.mergeNote}</p>
+          {/* Only asked when there is a profile on both sides. Keeping yours is the default. */}
+          {pending.profile && data.profile && (
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 type-label">
+              <input
+                type="checkbox"
+                checked={replaceProfile}
+                onChange={(event) => setReplaceProfile(event.target.checked)}
+                className="size-5 cursor-pointer accent-[var(--foreground)]"
+              />
+              {words.replaceProfile}
+            </label>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button onClick={() => ref.current?.close()}>{b.cancel}</Button>
+            <Button type="submit" variant="primary">
+              {b.confirm}
+            </Button>
+          </div>
+        </form>
+      )}
+    </dialog>
+  );
+}
+
+/**
+ * FR-9.3, reading only for now: link the folder the agent skill writes to, and
+ * read it in. Nothing is ever written to the folder, and the screen says so.
+ */
+function FolderCard() {
+  const f = t.folder;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [folder, setFolder] = useState<LinkedFolder | null>(null);
+  const [access, setAccess] = useState<FolderAccess | null>(null);
+  const [pending, setPending] = useState<Incoming | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<Message | null>(null);
+  const supported = canLinkFolder();
+
+  // The linked folder, if any, and whether the browser still lets the app read it.
+  useEffect(() => {
+    if (!supported) return;
+    let active = true;
+    loadFolderHandle().then(
+      async (saved) => {
+        if (!active || !saved) return;
+        const handle = saved as LinkedFolder;
+        setFolder(handle);
+        setAccess(await handle.queryPermission({ mode: 'read' }).catch(() => 'prompt' as const));
+      },
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, [supported]);
+
+  const read = async (handle: LinkedFolder) => {
+    setBusy(true);
+    setMessage(null);
+    const result = await readFolder(handle).finally(() => setBusy(false));
+    if (!result.ok) return setMessage({ tone: 'failure', text: f.problems[result.problem] });
+    setPending(result.incoming);
+    dialog.current?.showModal();
+  };
+
+  const link = async () => {
+    try {
+      const handle = await pickFolder();
+      // Kept so the link survives a reload. If this browser can't save, it still reads now.
+      await saveFolderHandle(handle).catch(() => {});
+      setFolder(handle);
+      setAccess('granted');
+      await read(handle);
+    } catch (error) {
+      // Closing the picker is not a problem.
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMessage({ tone: 'failure', text: f.failed });
+    }
+  };
+
+  const reconnect = async () => {
+    if (!folder) return;
+    const next = await folder.requestPermission({ mode: 'read' }).catch(() => 'denied' as const);
+    setAccess(next);
+    if (next === 'granted') await read(folder);
+  };
+
+  const unlink = async () => {
+    // Only the app's link goes. The folder and its files are left as they are.
+    await clearFolderHandle().catch(() => {});
+    setFolder(null);
+    setAccess(null);
+    setMessage({ tone: 'info', text: f.unlinked });
+  };
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <h2 className="type-title">{f.title}</h2>
+      {!supported ? (
+        <p className="max-w-[68ch] type-body">{f.unsupported}</p>
+      ) : (
+        <>
+          <p className="max-w-[68ch] type-body">{folder ? f.linked(folder.name) : f.body}</p>
+          <p className="max-w-[68ch] text-ink-2 type-caption">{f.readOnly}</p>
+          <div className="flex flex-wrap gap-2">
+            {!folder && (
+              <Button icon={FolderOpen} onClick={() => void link()}>
+                {f.link}
+              </Button>
+            )}
+            {folder && access === 'granted' && (
+              <Button icon={FolderOpen} disabled={busy} onClick={() => void read(folder)}>
+                {busy ? f.reading : f.read}
+              </Button>
+            )}
+            {folder && access !== 'granted' && (
+              <Button icon={FolderOpen} onClick={() => void reconnect()}>
+                {f.reconnect}
+              </Button>
+            )}
+            {folder && (
+              <Button variant="quiet" onClick={() => void unlink()}>
+                {f.unlink}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+      <div role="status">
+        {message && (
+          <Banner tone={message.tone} icon={message.tone === 'info' ? Check : TriangleAlert}>
+            {message.text}
+          </Banner>
+        )}
+      </div>
+      <ImportConfirm ref={dialog} pending={pending} words={f} onClose={() => setPending(null)} onDone={setMessage} />
+    </Card>
+  );
+}
+
 function BackupCard() {
   const { data, actions } = useApp();
   const fileInput = useRef<HTMLInputElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const [pending, setPending] = useState<Incoming | null>(null);
-  const [replaceProfile, setReplaceProfile] = useState(false);
   const [reading, setReading] = useState(false);
-  const [message, setMessage] = useState<{ tone: 'info' | 'failure'; text: string } | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
   const last = data.settings.lastBackupOn;
 
   const open = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -165,21 +364,7 @@ function BackupCard() {
     const result = await readBackup(new Uint8Array(await file.arrayBuffer()), inflateRaw).finally(() => setReading(false));
     if (!result.ok) return setMessage({ tone: 'failure', text: b.problems[result.problem] });
     setPending(result.incoming);
-    setReplaceProfile(false);
     dialog.current?.showModal();
-  };
-
-  const bringIn = async () => {
-    if (!pending) return;
-    const summary = await actions.importBackup(pending, replaceProfile);
-    dialog.current?.close();
-    setPending(null);
-    setMessage({
-      tone: 'info',
-      text: [b.done(summary.added, summary.alreadyHere, summary.runsAdded), b.profileDone[summary.profile], summary.needsReview > 0 ? b.reviewDone(summary.needsReview) : '']
-        .filter(Boolean)
-        .join(' '),
-    });
   };
 
   return (
@@ -207,46 +392,7 @@ function BackupCard() {
         )}
       </div>
 
-      <dialog
-        ref={dialog}
-        aria-labelledby="import-title"
-        onClose={() => setPending(null)}
-        className="m-auto w-[min(480px,calc(100vw-2*var(--gutter)))] rounded-card border border-hairline bg-sheet p-card text-foreground elev-overlay"
-      >
-        {pending && (
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void bringIn();
-            }}
-          >
-            <h3 id="import-title" className="type-title">
-              {b.confirmTitle}
-            </h3>
-            <p className="type-body">{b.contents(pending.leads.length, pending.runs.filter((run) => run.report).length, pending.profile !== null)}</p>
-            <p className="max-w-[68ch] text-ink-2 type-caption">{b.mergeNote}</p>
-            {/* Only asked when there is a profile on both sides. Keeping yours is the default. */}
-            {pending.profile && data.profile && (
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 type-label">
-                <input
-                  type="checkbox"
-                  checked={replaceProfile}
-                  onChange={(event) => setReplaceProfile(event.target.checked)}
-                  className="size-5 cursor-pointer accent-[var(--foreground)]"
-                />
-                {b.replaceProfile}
-              </label>
-            )}
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button onClick={() => dialog.current?.close()}>{b.cancel}</Button>
-              <Button type="submit" variant="primary">
-                {b.confirm}
-              </Button>
-            </div>
-          </form>
-        )}
-      </dialog>
+      <ImportConfirm ref={dialog} pending={pending} words={b} onClose={() => setPending(null)} onDone={setMessage} />
     </Card>
   );
 }
@@ -351,6 +497,7 @@ export function Data() {
         </Card>
 
         <div className="flex flex-col gap-gutter">
+          <FolderCard />
           <BackupCard />
           <BlockCard />
           <Card className="flex flex-col gap-3">
