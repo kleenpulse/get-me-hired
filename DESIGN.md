@@ -39,25 +39,25 @@ typography:
     lineHeight: 1.35
     letterSpacing: "normal"
   label:
-    fontFamily: "Figtree, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Poppins, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 600
     lineHeight: 1.45
     letterSpacing: "normal"
   body:
-    fontFamily: "Figtree, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Poppins, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
   caption:
-    fontFamily: "Figtree, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Poppins, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 500
     lineHeight: 1.35
     letterSpacing: "normal"
   action:
-    fontFamily: "Figtree, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Poppins, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 700
     lineHeight: 1.35
@@ -216,21 +216,21 @@ Dawn is a calm dashboard system for people who aren't technical and who open the
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--band` | `#CFCCCD` | `#05070D` | Behind the frame. Visible only on wide screens |
-| `--sheet` | `#FFFFFF` | `#0B1325` | The frame, the rail, side panels, dialogs |
-| `--card` | `#E7E6E9` | `#172036` | Default card ("pearl") |
-| `--card-nested` | `#D1D3D7` | `#232D47` | Anything inside a card: stat pills, tags, secondary buttons ("mist") |
-| `--lift` | `#FFFFFF` | `#313C5A` | Selected rows, icon chips, hook notes, board tiles |
-| `--slate` | `#A9ACB6` | `#414B66` | The one attention card per screen |
-| `--dawn` | `#D3DAE8` → `#DDDEE2` 30% → `#E7E5DA` 65% → `#F4EAD0` | `#1D2746` → `#252B40` → `#302E34` → `#3B3128` | The Day card and the wizard card. Top to bottom |
-| `--foreground` | `#0B1325` | `#EEF0F5` | Text and icons |
-| `--ink-2` | `#4A4E58` | `#B4BAC8` | Secondary text, captions |
-| `--ink-3` | `#62666F` | `#8C93A5` | Placeholders, dashed outlines, the off-state knob. Never body text |
-| `--border` | `rgb(11 19 37 / 0.12)` | `rgb(238 240 245 / 0.12)` | Hairlines |
-| `--primary` | `#0B1325` | `#EEF0F5` | Main button, toggle knob, tier A chip |
-| `--primary-foreground` | `#FFFFFF` | `#0B1325` | Text on `--primary` |
-| `--glass` | `rgb(255 255 255 / 0.6)` | `rgb(238 240 245 / 0.1)` | Chips on the dawn and slate cards |
-| `--ring` | `#0B1325` | `#EEF0F5` | Focus ring |
+| `--band` | `#CFCCCD` | `#000000` | Behind the frame. Visible only on wide screens |
+| `--sheet` | `#FFFFFF` | `#0A0A0A` | The frame, the rail, side panels, dialogs |
+| `--card` | `#E7E6E9` | `#161616` | Default card ("pearl") |
+| `--card-nested` | `#D1D3D7` | `#222222` | Anything inside a card: stat pills, tags, secondary buttons ("mist") |
+| `--lift` | `#FFFFFF` | `#2E2E2E` | Selected rows, icon chips, hook notes, board tiles |
+| `--slate` | `#A9ACB6` | `#343434` | The one attention card per screen |
+| `--dawn` | `#D3DAE8` → `#DDDEE2` 30% → `#E7E5DA` 65% → `#F4EAD0` | `#242424` → `#272625` → `#2C2823` → `#33291C` | The Day card and the wizard card. Top to bottom |
+| `--foreground` | `#0B1325` | `#F2F2F2` | Text and icons |
+| `--ink-2` | `#4A4E58` | `#B8B8B8` | Secondary text, captions |
+| `--ink-3` | `#62666F` | `#8F8F8F` | Placeholders, dashed outlines, the off-state knob. Never body text |
+| `--border` | `rgb(11 19 37 / 0.12)` | `rgb(255 255 255 / 0.12)` | Hairlines |
+| `--primary` | `#0B1325` | `#F2F2F2` | Main button, toggle knob, tier A chip |
+| `--primary-foreground` | `#FFFFFF` | `#0A0A0A` | Text on `--primary` |
+| `--glass` | `rgb(255 255 255 / 0.6)` | `rgb(255 255 255 / 0.1)` | Chips on the dawn and slate cards |
+| `--ring` | `#0B1325` | `#F2F2F2` | Focus ring |
 
 ### Meaning colours
 
@@ -252,7 +252,7 @@ Each one has exactly one meaning. Each is always paired with an icon and a word,
 4. **Slate carries `--foreground` only.** Secondary text fails on it (3.67:1). Put secondary content in a `--glass` or `--lift` chip.
 5. **Meaning text sits on its own soft fill, or on sheet, card or lift.** Never directly on mist: `--ok` fails there (4.33:1), and one rule for all three is easier to keep.
 6. **One dawn card and one slate card per screen, at most.**
-7. **Dark theme follows the same ladder.** Each step up is lighter: sheet, card, nested, lift. The frame takes the reference's navy. The main button flips to pale with navy text.
+7. **The dark theme is black and shades of black** (the owner's choice, 2026-11-14). The greys are neutral, with no blue in them, and the band behind the frame is true black. It follows the same ladder: each step up is lighter (sheet, card, nested, lift). The main button flips to pale with near-black text. The meaning colours keep their hue. The one other tint is a faint warm glow at the bottom of the dawn card. Dark slate is set so that secondary text in a `--glass` chip on it still passes (4.61:1).
 
 All pairs above were computed against WCAG 2.2. The numbers are in [Appendix B](#appendix-b-contrast-results).
 
@@ -260,27 +260,29 @@ All pairs above were computed against WCAG 2.2. The numbers are in [Appendix B](
 
 | Family | Use | Licence |
 |---|---|---|
-| **Figtree** (variable, 300–900) | All interface text | SIL OFL 1.1 |
+| **Figtree** (variable, 300–900) | Big, bold text: the `display` and `title` styles | SIL OFL 1.1 |
+| **Poppins** (400, 500, 600, 700) | Smaller text: the `label`, `body`, `caption` and `action` styles | SIL OFL 1.1 |
 | **Geist Mono** | Email addresses, URLs, post IDs, reason codes | SIL OFL 1.1 |
+| **Dawn Numerals** | Not a font of its own: the name the CSS gives to Figtree's digits (0 to 9) alone. Used for numbers that must keep their width, see the rules below | Figtree's |
 
-The reference uses one geometric sans for everything. Figtree is the closest open-licence face that stays readable at 12px and has tabular figures. Addresses are set in a mono face for a practical reason: in a geometric sans, `l`, `I` and `1` look alike, and the user copies these addresses into real emails.
+The reference uses one geometric sans for everything. Dawn uses two (the owner's choice, 2026-11-14): Figtree for headings, company names and the big counter, and Poppins for everything at 14px and below. Addresses are set in a mono face for a practical reason: in a geometric sans, `l`, `I` and `1` look alike, and the user copies these addresses into real emails. In Poppins, `l` and `I` are the same stroke.
 
-| Style | Size / line | Weight | Use |
+| Style | Size / line | Face and weight | Use |
 |---|---|---|---|
-| `display` | 28 / 32 | 600, -0.01em | Wizard headings, the big counter ("6 of 20") |
-| `title` | 18 / 24 | 600 | Card titles, company names |
-| `label` | 14 / 20 | 600 | Row titles, values, secondary buttons |
-| `body` | 14 / 22 | 400 | Sentences: what a company does, hooks, help |
-| `caption` | 12 / 16 | 500 | Text under a title, pill labels, tags. In `--ink-2` |
-| `action` | 12 / 16 | 700, uppercase, 0.06em | The primary button only |
-| `data` | 13 / 20 | 400, mono | Addresses, URLs, IDs |
+| `display` | 28 / 32 | Figtree 600, -0.01em | Wizard headings, the big counter ("6 of 20") |
+| `title` | 18 / 24 | Figtree 600 | Card titles, company names |
+| `label` | 14 / 20 | Poppins 600 | Row titles, values, secondary buttons |
+| `body` | 14 / 22 | Poppins 400 | Sentences: what a company does, hooks, help |
+| `caption` | 12 / 16 | Poppins 500 | Text under a title, pill labels, tags. In `--ink-2` |
+| `action` | 12 / 16 | Poppins 700, uppercase, 0.06em | The primary button only |
+| `data` | 13 / 20 | Geist Mono 400 | Addresses, URLs, IDs |
 
 Rules:
 
 - **Sizes are in `rem`.** The Text size setting (FR-10.5) sets the root to 100%, 112.5% or 125%. Controls use `min-height`, so they grow with the text.
 - **12px is the floor.** Nothing is smaller, in any state.
 - **Sentence case everywhere.** Uppercase is for the primary button alone, and that label is 4 words or fewer.
-- **Numbers that line up or change** (counters, costs, ages, table columns) use `font-variant-numeric: tabular-nums`.
+- **Numbers that line up or change** (counters, costs, ages, table columns) use `font-variant-numeric: tabular-nums`. Poppins has no tabular figures, so in those places the digits alone are set in Figtree, through the Dawn Numerals face and the `--font-numeric` token (the `.tabular` class does both). The two faces have the same capital height, so the digits sit level with the words.
 - **Two weights do most of the work:** 400 for sentences, 600 for names and values. 500 is for captions and 700 for the primary button.
 - **Body lines stop at 68 characters.**
 - **Inputs are 16px on phones,** so iOS doesn't zoom the page on focus.
@@ -553,6 +555,7 @@ Keep these in one file. Components read tokens and never hold a hex value. `data
 	--warn-soft: #f5e6c4;
 	--critical: #a8261d;
 	--critical-soft: #f7dcd9;
+	--critical-foreground: #ffffff; /* text on a --critical fill: 7.09:1 */
 
 	--radius-note: 8px;
 	--radius-tile: 20px;
@@ -569,29 +572,31 @@ Keep these in one file. Components read tokens and never hold a hex value. `data
 
 	--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
-	--font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+	--font-display: "Figtree", ui-sans-serif, system-ui, sans-serif;
+	--font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "Geist Mono", ui-monospace, monospace;
+	--font-numeric: "Dawn Numerals", var(--font-sans); /* Figtree digits, Poppins words */
 }
 
 [data-theme="dark"] {
 	color-scheme: dark;
 
-	--band: #05070d;
-	--sheet: #0b1325;
-	--card: #172036;
-	--card-nested: #232d47;
-	--lift: #313c5a;
-	--slate: #414b66;
-	--dawn: linear-gradient(180deg, #1d2746 0%, #252b40 30%, #302e34 65%, #3b3128 100%);
-	--glass: rgb(238 240 245 / 0.1);
+	--band: #000000;
+	--sheet: #0a0a0a;
+	--card: #161616;
+	--card-nested: #222222;
+	--lift: #2e2e2e;
+	--slate: #343434;
+	--dawn: linear-gradient(180deg, #242424 0%, #272625 30%, #2c2823 65%, #33291c 100%);
+	--glass: rgb(255 255 255 / 0.1);
 
-	--foreground: #eef0f5;
-	--ink-2: #b4bac8;
-	--ink-3: #8c93a5;
-	--border: rgb(238 240 245 / 0.12);
-	--primary: #eef0f5;
-	--primary-foreground: #0b1325;
-	--ring: #eef0f5;
+	--foreground: #f2f2f2;
+	--ink-2: #b8b8b8;
+	--ink-3: #8f8f8f;
+	--border: rgb(255 255 255 / 0.12);
+	--primary: #f2f2f2;
+	--primary-foreground: #0a0a0a;
+	--ring: #f2f2f2;
 
 	--signal: #e4716f;
 	--signal-ink: #f29a97;
@@ -601,6 +606,7 @@ Keep these in one file. Components read tokens and never hold a hex value. `data
 	--warn-soft: #3a2e12;
 	--critical: #f28b83;
 	--critical-soft: #42201e;
+	--critical-foreground: #0a0a0a; /* text on a --critical fill: 8.29:1 */
 
 	--shadow-lift: 0 6px 18px -8px rgb(0 0 0 / 0.5);
 	--shadow-overlay: 0 24px 60px -20px rgb(0 0 0 / 0.7);
@@ -619,9 +625,9 @@ Keep these in one file. Components read tokens and never hold a hex value. `data
 
 Notes for the build:
 
-- **Fonts are self-hosted** as `woff2` in `assets/fonts/`, with `font-display: swap` and a preload for Figtree. The security policy needs only `font-src 'self'`.
+- **Fonts are self-hosted** as `woff2` in `assets/fonts/`, with `font-display: swap` and a preload for Poppins 400, the face most of the text uses. Poppins isn't a variable font, so each of its 4 weights is its own file. The security policy needs only `font-src 'self'`.
 - **Ring and slider values** are set as CSS custom properties from script (for example `--progress`). That works under a strict `style-src`. Don't write inline `style` attributes into static HTML.
-- **In the dark theme the destructive button** uses `--critical` with navy text (7.76:1), since white text on it would fail.
+- **In the dark theme the destructive button** uses `--critical` with near-black text (8.29:1, the `--critical-foreground` token), since white text on it would fail.
 
 ## Appendix A. The reference, measured
 
@@ -688,13 +694,13 @@ On their own soft fills: `--ok` 5.30, `--warn` 5.77, `--critical` 5.47. White on
 
 | Text | sheet | card | nested | lift | slate | dawn (top / bottom) |
 |---|---|---|---|---|---|---|
-| `--foreground` | 16.24 | 14.21 | 11.98 | 9.57 | 7.60 | 12.87 / 11.12 |
-| `--ink-2` | 9.52 | 8.33 | 7.02 | 5.61 | 4.46 (not allowed) | 7.55 / 6.52 |
-| `--ink-3` | 6.02 | 5.27 | 4.44 | 3.55 | — | — |
-| `--signal-ink` | 8.68 | 7.59 | 6.40 | 5.12 | — | — |
-| `--signal` (dot) | 6.08 | 5.32 | 4.48 | 3.58 | — | — |
-| `--ok` | 9.38 | 8.20 | 6.91 | 5.53 | — | — |
-| `--warn` | 9.86 | 8.63 | 7.27 | 5.81 | — | — |
-| `--critical` | 7.76 | 6.79 | 5.72 | 4.57 | — | — |
+| `--foreground` | 17.68 | 16.16 | 14.21 | 12.13 | 11.12 | 13.87 / 12.72 |
+| `--ink-2` | 9.98 | 9.12 | 8.02 | 6.85 | 6.28 | 7.83 / 7.18 |
+| `--ink-3` | 6.12 | 5.60 | 4.92 | 4.20 | — | — |
+| `--signal-ink` | 9.28 | 8.48 | 7.46 | 6.37 | — | — |
+| `--signal` (dot) | 6.50 | 5.94 | 5.22 | 4.46 | — | — |
+| `--ok` | 10.02 | 9.16 | 8.06 | 6.88 | — | — |
+| `--warn` | 10.55 | 9.64 | 8.48 | 7.23 | — | — |
+| `--critical` | 8.29 | 7.58 | 6.66 | 5.69 | — | — |
 
-On their own soft fills: `--ok` 6.50, `--warn` 7.08, `--critical` 6.04. Navy on `--primary`: 16.24.
+On their own soft fills: `--ok` 6.50, `--warn` 7.08, `--critical` 6.04. Near-black on `--primary`: 17.68.

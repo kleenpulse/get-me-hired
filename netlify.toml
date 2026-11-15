@@ -1,0 +1,42 @@
+# Netlify settings (FRD NFR-5). The app is static files only: no functions, no
+# proxy, no server code. Netlify builds from the GitHub repo once the site is
+# linked. It is not linked yet.
+
+[build]
+  command = "bun run build"
+  publish = "dist"
+
+# Every path is a screen of the single-page app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security headers (NFR-2, NFR-3). The policy allows the app's own files, and
+# requests only to the providers a user can configure. Add a host to
+# connect-src when a new provider or source is added, and nowhere else.
+#
+#   generativelanguage.googleapis.com  Google Gemini (the default provider, D13)
+#   openrouter.ai                      OpenRouter
+#   api.anthropic.com                  Anthropic
+#   api.openai.com                     OpenAI
+#   api.firecrawl.dev                  Firecrawl (optional search provider)
+#   hn.algolia.com                     Hacker News, read directly with no AI
+#
+# style-src has no 'unsafe-inline': rings and sliders set CSS custom properties
+# from script, which the policy allows (DESIGN.md, "Tokens as CSS").
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://generativelanguage.googleapis.com https://openrouter.ai https://api.anthropic.com https://api.openai.com https://api.firecrawl.dev https://hn.algolia.com; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    # Links to sources must not tell those sites where the visitor came from.
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+
+# Built files have a hash in their name, so they can be cached for good.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

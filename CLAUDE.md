@@ -11,12 +11,16 @@ When the two disagree, the FRD wins: fix DESIGN.md to match. The 7 principles in
 
 ## Where the project stands
 
-- **The spike in FRD §17 is in progress.** Finish it before any screen is built.
+- **The app is being built. Milestone 1 is done: everything that needs no provider.**
+  - Built: the scaffold (React, Tailwind on the Dawn tokens, self-hosted fonts, `netlify.toml` with the security headers); the lead model, follow-up rules (FRD §8) and ranking (§9) in `core/`, with tests; the Welcome, Today, Board and Data screens; saving to IndexedDB; and sample mode (FR-1.4) with a sample hunt.
+  - **The hunt seam.** `core/hunt.ts` is the shape every hunt speaks: steps, a kept and dropped tally, a result. The sample hunt in `core/sample-hunt.ts` speaks it today. A real hunt must speak the same shape, so the screens need no change. `runHunt` in `app/state.tsx` is where it plugs in.
+  - Not built yet (milestone 2, in this order): the profile (FR-3.x), the provider key screen (FR-2.4), the real hunt on Gemini (port the working logic from `spike/hunt.ts` into `core/`), the run report (FR-8.1), ZIP export and import (FR-9.2), the do-not-contact list (FR-5.7), Settings, and drag-and-drop on the Board.
+  - The owner has no money for API keys. Simulate what a key would do, test real calls only on free tiers, and build so that a user's own key plugs in.
+- **The spike in FRD §17 is mostly done.** What is left needs keys the owner doesn't have.
   - Done: the shared core in `core/` (post-age decoder, CSV reader and writer, lead key) with unit tests. Browser access checked for every candidate with made-up keys, as plain requests and through the Vercel AI SDK. Real-key checks passed for OpenRouter, and for Gemini on its free tier (which has no web search). NVIDIA blocks browser calls. One whole hunt with no search provider was measured on `gemini-3.1-flash-lite`. Results and what they mean for the build are in FRD §19.
   - Decided: the default provider is Google Gemini with `gemini-3.1-flash-lite` (FRD D13).
   - Still to do: test web search on a Gemini key with billing on, confirm OpenAI and Anthropic with real keys, run the browser check in Firefox and Safari, then record the v1 provider list in FRD §18 and §19. The provider list is the owner's to decide.
   - **Spend nothing without the owner's say** (owner's instruction, 2026-11-14: "use free models only"). Use Gemini's free tier, where `gemini-3.1-flash-lite` is the cheapest model that works, and on OpenRouter only ids ending in `:free` with the free `openrouter` fetch engine. The OpenRouter account has no paid credit, and web search there always costs money.
-- No app screens exist yet. React, Tailwind, `motion` and `lucide-react` aren't installed: add them with the first screen.
 - The Netlify site `get-me-hired` (get-me-hired.netlify.app) is claimed, but it isn't linked to this folder and nothing is deployed. Don't link or deploy without the owner's go-ahead.
 
 ## The spike
@@ -53,7 +57,7 @@ app/              app shell, routing, screens
 components/       shared UI pieces from DESIGN.md
 core/             hunt logic, provider adapters, data format, ranking, lifecycle
 styles/           tokens.css and global styles
-assets/fonts/     self-hosted Figtree and Geist Mono (woff2)
+assets/           the favicon, and fonts/ with self-hosted Figtree, Poppins and Geist Mono (woff2)
 fixtures/         saved pages and responses for tests
 spike/            the provider spike page (local only, never deployed, no build)
 netlify.toml      build settings, security headers (CSP), SPA redirect
@@ -84,9 +88,18 @@ The app shares its method and file format with the `get-me-hired` agent skill, a
 | Command | What it does |
 |---|---|
 | `bun install` | Install dependencies |
+| `bun run dev` | Run the app at http://localhost:5173 |
+| `bun run build` | Check types, then build the static site into `dist/` |
+| `bun run preview` | Serve the built `dist/` locally |
 | `bun run test` | Run the unit tests once (Vitest) |
 | `bun run test:watch` | Run the tests on every change |
 | `bun run typecheck` | Check types (`tsc --noEmit`) |
 | `bun run spike` | Serve the provider spike page at http://localhost:5183. Keys come from `.env.local` (see `.env.example`). |
 
-There are no dev or build commands for the app yet. Add them when the first screen lands.
+Before saying a screen works, run it in a real browser at 1280px and at 360px, in light and dark, and check the console. `bun run preview` doesn't send the security headers from `netlify.toml`: to test the policy, serve `dist/` with those headers.
+
+## Styling notes
+
+- `styles/tokens.css` is a copy of the token block in DESIGN.md. Change DESIGN.md first, then the copy.
+- Colours and spacing are mapped to Tailwind names in `styles/global.css` (`bg-card`, `text-ink-2`, `p-card`, `gap-gutter`). The radius, shadow and text styles are utilities written out there (`rounded-card`, `elev-lift`, `type-label`), because the tokens already use the names Tailwind would generate.
+- Set ring and slider values as CSS custom properties from script. The policy has no `'unsafe-inline'` for styles.
