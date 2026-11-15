@@ -16,6 +16,7 @@ import { sameEntry, type BlockEntry } from '@/core/block';
 import { spentThisMonth } from '@/core/budget';
 import { localDate } from '@/core/dates';
 import { waitingSteps, type HuntProgress, type HuntResult, type HuntRunner, type HuntStep } from '@/core/hunt';
+import { NO_USAGE } from '@/core/prices';
 import type { Lead, LeadStatus, StatusChange } from '@/core/lead';
 import { cleanProfile, missingFields, type Profile } from '@/core/profile';
 import { classifyProviderError, PROVIDER_IDS, PROVIDERS, type ProviderId } from '@/core/providers';
@@ -30,7 +31,7 @@ import {
 } from '@/core/lifecycle';
 import { createSampleHunt, type Pause } from '@/core/sample-hunt';
 import { buildSamplePipeline } from '@/core/sample-leads';
-import { emptyData, type AppData, type Settings } from './data';
+import { emptyData, type AppData, type HuntCheckpoint, type Settings } from './data';
 import { applyDisplay, clearDisplayCopy, DEFAULT_DISPLAY, writeDisplayCopy } from './display';
 import {
   clearData,
@@ -52,14 +53,15 @@ import { downloadBlob } from './download';
 import { deletePerson } from './erase';
 import { capAllowsStart, capState, type CapState } from './cap';
 import { addFound, applyBlocks } from './found';
-import { browserLocks, withHuntLock } from './hunt-lock';
+import { browserLocks, HUNT_LOCK, withHuntLock } from './hunt-lock';
+import { settleInterrupted } from './interrupted';
 import { unsavedScreen } from './router';
 import { withNotes } from './notes-saver';
 import { applyRetention } from './retention';
 import { NO_FILTER, type BoardFilter } from './board-filter';
 import { shouldRunOnOpen } from './run-on-open';
 import { anySourceOn, huntSources } from './sources';
-import { TabSync } from './tab-sync';
+import { needsRekey, TabSync } from './tab-sync';
 import { newPassphrase, openKeys, sealedProviders, sealKeys, unlock, WrongPassphraseError, type Unlocked } from '@/core/key-crypto';
 import { usd } from './format';
 import { strings } from './strings';
@@ -136,6 +138,11 @@ interface Actions {
   /** A forgotten passphrase: deletes every stored key. Nothing can be recovered. */
   forgetKeys: () => Promise<void>;
   setBoardFilter: (filter: BoardFilter) => void;
+  /**
+   * Records a hunt that stopped partway as a cancelled run, with what it spent and found
+   * (FR-4.15). With `runAgain`, a new hunt then starts.
+   */
+  settleInterrupted: (runAgain: boolean) => void;
   /** Hides the note that another tab changed the data. */
   dismissChangedElsewhere: () => void;
 }
@@ -177,6 +184,11 @@ export interface AppState {
   keyLock: KeyLock;
   /** Counts the times another tab's saved data was read in. Screens use it as a key, so their forms start over. */
   reloads: number;
+  /**
+   * A hunt that stopped partway, found on open with no tab hunting (FR-4.15). `null`
+   * otherwise. Settle it with actions.settleInterrupted.
+   */
+  interruptedHunt: HuntCheckpoint | null;
   /**
    * The Board's search and filters (FR-6.6). Kept here, above the screens, so another
    * tab's save doesn't clear a search. In memory only: never saved, gone on reload.
@@ -293,6 +305,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [changedElsewhere, setChangedElsewhere] = useState<AppState['changedElsewhere']>(false);
   const [reloads, setReloads] = useState(0);
   const [boardFilter, setBoardFilter] = useState<BoardFilter>(NO_FILTER);
+  const [interruptedHunt, setInterruptedHunt] = useState<HuntCheckpoint | null>(null);
 
   // Keeps this tab in step with the others: ordered writes over the right revision, and
   // never a copy built before another tab's data was read in (tab-sync.ts).
@@ -302,8 +315,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       { load: loadData, save: saveData },
       {
         replace: (next) => {
+          // Only another tab's hunt progress changed: take it in, but don't make the screens start over.
+          const rekey = needsRekey(latest.current, next);
           loaded.current = next;
           setData(next);
+          if (!rekey) return;
           setReloads((count) => count + 1);
           // Profile with unsaved changes keeps them (App.tsx doesn't re-key it). Say so.
           if (unsavedScreen() === 'profile') setChangedElsewhere((current) => current || 'draft-kept');
@@ -506,6 +522,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
       leads: readonly Lead[],
       cap: CapState | null,
     ): Promise<void> => {
+      const real = !sample && Boolean(provider && key && profile);
+      if (real && provider) {
+        // Saved before any call, so a tab that closes mid-hunt is found on the next open (FR-4.15).
+        // A hunt that stopped partway earlier is recorded first, so its cost and leads aren't lost.
+        const started = new Date();
+        setData((current) => ({
+          ...settleInterrupted(current),
+          huntInProgress: {
+            at: started.toISOString(),
+            date: localDate(started),
+            provider,
+            steps: waitingSteps(),
+            leads: [],
+            dropped: [],
+            usage: NO_USAGE,
+            chargedUsd: 0,
+          },
+        }));
+      }
+      // What it has found and spent is saved as it goes: on every model call, and at most once a
+      // second otherwise, so a closed tab still counts what it spent and keeps what it found.
+      let lastSaved = 0;
+      let lastCalls = 0;
+      const checkpoint = (progress: HuntProgress) => {
+        const data = progress.checkpoint;
+        if (!real || !data) return;
+        const now = Date.now();
+        if (data.usage.calls === lastCalls && now - lastSaved < 1000) return;
+        lastSaved = now;
+        lastCalls = data.usage.calls;
+        setData((current) =>
+          current.huntInProgress ? { ...current, huntInProgress: { ...current.huntInProgress, ...data, steps: progress.steps } } : current,
+        );
+      };
+      // Keep the screen awake while a real hunt runs (FR-4.15). The browser lets go of it when the
+      // tab is hidden, so it's asked for again when the tab is shown. Where it's missing, nothing happens.
+      let wake: WakeLockSentinel | null = null;
+      const keepAwake = () => {
+        if (!real || document.visibilityState !== 'visible' || !('wakeLock' in navigator)) return;
+        navigator.wakeLock.request('screen').then(
+          (sentinel) => {
+            wake = sentinel;
+          },
+          () => {},
+        );
+      };
+      keepAwake();
+      document.addEventListener('visibilitychange', keepAwake);
+
       // The real hunt and the AI SDK load only now, so the first page load doesn't pay for them.
       const runner: Promise<HuntRunner> =
         sample || !provider || !key || !profile
@@ -532,7 +597,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           run({
             now: new Date(),
             signal: control.signal,
-            onProgress: (progress) => setHunt((current) => ({ ...current, progress })),
+            onProgress: (progress) => {
+              setHunt((current) => ({ ...current, progress }));
+              checkpoint(progress);
+            },
           }),
         )
         .then((result) => {
@@ -571,6 +639,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => {
           huntControl.current = null;
+          document.removeEventListener('visibilitychange', keepAwake);
+          void wake?.release().catch(() => {});
         });
     },
     [],
@@ -648,6 +718,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (page.prerendering) document.addEventListener('prerenderingchange', go, { once: true });
     else go();
   }, [ready, loadFailed, savingOff, keyLock, keyProviders, startHunt]);
+
+  // A saved hunt in progress, with no hunt running here and no tab holding the hunt lock,
+  // stopped partway (FR-4.15). Without the Web Locks API it can't be told apart, so it counts.
+  const checkpointAt = data.huntInProgress?.at ?? null;
+  useEffect(() => {
+    if (!ready || loadFailed || savingOff || !checkpointAt || huntControl.current) {
+      setInterruptedHunt(null);
+      return;
+    }
+    let active = true;
+    const found = () => active && !huntControl.current && setInterruptedHunt(latest.current.huntInProgress ?? null);
+    if (typeof navigator !== 'undefined' && navigator.locks?.query) {
+      navigator.locks.query().then(
+        (state) => {
+          if (!(state.held ?? []).some((lock) => lock.name === HUNT_LOCK)) found();
+        },
+        found,
+      );
+    } else found();
+    return () => {
+      active = false;
+    };
+  }, [ready, loadFailed, savingOff, checkpointAt, hunt.running]);
 
   // Closing the tab during a real hunt asks first (FRD §10.2). A sample hunt loses nothing.
   useEffect(() => {
@@ -811,6 +904,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       dismissChangedElsewhere: () => setChangedElsewhere(false),
       setBoardFilter,
+      settleInterrupted: (runAgain) => {
+        setInterruptedHunt(null);
+        void commit((current) => settleInterrupted(current)).then(() => {
+          if (runAgain) startHunt(false);
+        });
+      },
 
       unlockKeys: async (passphrase) => {
         const record = await loadKeyRecord();
@@ -906,8 +1005,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [startHunt, tabSync, takeKeys, commit]);
 
   const state = useMemo<AppState>(
-    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, boardFilter, keyProviders, hunt, actions }),
-    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, boardFilter, keyProviders, hunt, actions],
+    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, boardFilter, interruptedHunt, keyProviders, hunt, actions }),
+    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, boardFilter, interruptedHunt, keyProviders, hunt, actions],
   );
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;

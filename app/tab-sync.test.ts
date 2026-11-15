@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyData, type AppData } from './data';
 import { revisionOf, StaleDataError } from './storage';
-import { TabSync, type SyncStorage } from './tab-sync';
+import { needsRekey, TabSync, type SyncStorage } from './tab-sync';
 
 /** One stored record shared by "tabs", with saveData's check: write only over the revision you have. */
 function sharedStorage(initial: AppData | null) {
@@ -120,5 +120,34 @@ describe('one tab in step with the others (NFR-7)', () => {
     expect(one.shown.at(-1)?.settings.dailyTarget).toBe(emptyData().settings.dailyTarget);
     expect(await sync.write(mine)).toBe('dropped');
     expect(cleared.record()).toBeNull();
+  });
+});
+
+describe("another tab's hunt progress (FR-4.15)", () => {
+  const base: AppData = { ...emptyData(), revision: 3 };
+  const marker = {
+    at: '2026-11-15T09:00:00.000Z',
+    date: '2026-11-15',
+    provider: 'gemini' as const,
+    steps: [],
+    leads: [],
+    dropped: [],
+    usage: { calls: 1, inputTokens: 10, outputTokens: 10, unreported: 0 },
+    chargedUsd: 0.001,
+  };
+
+  it("doesn't make the screens start over when only the hunt's progress changed", () => {
+    expect(needsRekey(base, { ...base, huntInProgress: marker, revision: 4 })).toBe(false);
+    expect(needsRekey({ ...base, huntInProgress: marker }, { ...base, huntInProgress: { ...marker, chargedUsd: 0.002 }, revision: 5, tabGeneration: 2 })).toBe(false);
+  });
+
+  it('ignores the order keys were written in', () => {
+    const reordered = Object.fromEntries(Object.entries(base).reverse()) as AppData;
+    expect(needsRekey(base, reordered)).toBe(false);
+  });
+
+  it('does when anything a screen shows changed', () => {
+    expect(needsRekey(base, { ...base, settings: { ...base.settings, dailyTarget: 33 } })).toBe(true);
+    expect(needsRekey(base, { ...base, runs: [{ at: 'x', date: '2026-11-15', status: 'completed', kept: 0, dropped: [], sample: false }] })).toBe(true);
   });
 });

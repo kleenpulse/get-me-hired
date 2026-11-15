@@ -404,6 +404,18 @@ describe('the do-not-contact list in a hunt (AC-5.7)', () => {
   });
 });
 
+describe('saving a hunt as it goes (FR-4.15)', () => {
+  it('reports what it has found and spent after each model call', async () => {
+    const { result, progress } = await hunt(standIn([]));
+    const last = progress.at(-1)?.checkpoint;
+    expect(last?.usage.calls).toBe(result.usage?.calls);
+    expect(last?.chargedUsd).toBeCloseTo(result.chargedUsd ?? -1);
+    expect(last?.leads.map((lead) => lead.key)).toEqual(result.leads.map((lead) => lead.key));
+    // A report goes out right after the call lands, before the next step.
+    expect(progress.some((entry) => entry.checkpoint?.usage.calls === 1)).toBe(true);
+  });
+});
+
 describe('the monthly spending cap in a hunt (AC-4.13)', () => {
   // 16 openings like Quillstack's, so the hunt makes 2 model calls of 8.
   const copies = Array.from({ length: 16 }, (_, index) => ({ ...COMMENTS.quillstack, id: 91000001 + index }));

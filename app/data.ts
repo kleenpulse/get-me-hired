@@ -2,7 +2,7 @@
 
 import type { BlockEntry } from '@/core/block';
 import { DEFAULT_DISPLAY, isDisplay, type Display } from './display';
-import type { DroppedLead, HuntResult } from '@/core/hunt';
+import type { DroppedLead, HuntCheckpointData, HuntResult, HuntStep } from '@/core/hunt';
 import type { Lead } from '@/core/lead';
 import { DEFAULT_CADENCE, type Cadence } from '@/core/lifecycle';
 import { emptyProfile, type Profile } from '@/core/profile';
@@ -40,6 +40,30 @@ export interface Settings {
   cadence: Cadence;
   /** The provider hunts use. Only its name: the key itself is stored apart (see storage.ts). */
   provider: ProviderId | null;
+}
+
+export interface HuntCheckpoint extends HuntCheckpointData {
+  /** When the hunt started, as a UTC date-time, and the user's local date. */
+  at: string;
+  date: string;
+  provider: ProviderId;
+  steps: HuntStep[];
+}
+
+export function isHuntCheckpoint(value: unknown): value is HuntCheckpoint {
+  if (typeof value !== 'object' || value === null) return false;
+  const entry = value as Partial<HuntCheckpoint>;
+  return (
+    typeof entry.at === 'string' &&
+    typeof entry.date === 'string' &&
+    typeof entry.provider === 'string' &&
+    Array.isArray(entry.steps) &&
+    Array.isArray(entry.leads) &&
+    Array.isArray(entry.dropped) &&
+    typeof entry.usage === 'object' &&
+    entry.usage !== null &&
+    (entry.chargedUsd === null || typeof entry.chargedUsd === 'number')
+  );
 }
 
 export interface RunRecord {
@@ -86,6 +110,12 @@ export interface AppData {
    */
   revision?: number;
   /**
+   * A real hunt that is running, or that stopped partway because its tab closed
+   * (FR-4.15). Saved as the hunt goes: what it found and spent so far. A finished
+   * hunt clears it, and its cost counts toward the monthly cap until then.
+   */
+  huntInProgress?: HuntCheckpoint | null;
+  /**
    * In this tab's memory only, never saved: which read of the data this copy was
    * built on (tab-sync.ts), so a copy built before another tab's data was read in
    * can't be written over it.
@@ -124,6 +154,7 @@ export function withDefaults(saved: AppData): AppData {
     ...saved,
     profile: saved.profile ? { ...emptyProfile(), ...saved.profile } : null,
     doNotContact: Array.isArray(saved.doNotContact) ? saved.doNotContact : [],
+    huntInProgress: isHuntCheckpoint(saved.huntInProgress) ? saved.huntInProgress : null,
     settings: {
       ...fresh.settings,
       ...saved.settings,

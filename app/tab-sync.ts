@@ -30,6 +30,26 @@ export interface SyncEvents {
 
 export type WriteOutcome = 'saved' | 'dropped' | 'failed';
 
+/** JSON with object keys in order, so two copies built in different ways compare equal. */
+function stable(value: unknown): string {
+  return JSON.stringify(value, (_key, entry: unknown) =>
+    entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? Object.fromEntries(Object.entries(entry as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : entry,
+  );
+}
+
+/**
+ * True when data read in from another tab differs from this tab's copy in
+ * anything a screen shows. A hunt in another tab saves its progress about once
+ * a second (FR-4.15): those saves change only `huntInProgress`, and must not
+ * make every screen here start over, closing dialogs and clearing typed values.
+ */
+export function needsRekey(before: AppData, after: AppData): boolean {
+  const shown = ({ huntInProgress: _hunt, revision: _revision, tabGeneration: _generation, ...rest }: AppData) => rest;
+  return stable(shown(before)) !== stable(shown(after));
+}
+
 export class TabSync {
   private revision = 0;
   private generation = 0;

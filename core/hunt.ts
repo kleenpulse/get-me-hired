@@ -46,6 +46,20 @@ export interface HuntProgress {
   steps: HuntStep[];
   kept: number;
   dropped: number;
+  /**
+   * What a real hunt has found and spent so far, so it can be saved as it goes: a
+   * tab that closes mid-hunt still counts what it spent, and keeps what it found
+   * (FR-4.15, AC-4.13). Sample hunts leave it out.
+   */
+  checkpoint?: HuntCheckpointData;
+}
+
+export interface HuntCheckpointData {
+  leads: Lead[];
+  dropped: DroppedLead[];
+  usage: Usage;
+  /** As in HuntResult: unreported calls at their bound, `null` for a model with no known price. */
+  chargedUsd: number | null;
 }
 
 /**
