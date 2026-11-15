@@ -3,7 +3,7 @@
 // says so. It is never left blank.
 
 import { Banknote, Briefcase, Check, Clock, Copy, Mail, MapPin, ThumbsUp } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { personEntry } from '@/core/block';
 import { emailedCount, type Contact, type Lead, type Person, type Signal } from '@/core/lead';
 import { nextStepFor } from '@/core/lifecycle';
@@ -121,14 +121,34 @@ function AskedRow({ contact }: { contact: Contact }) {
   );
 }
 
-function PersonBlock({ lead, person, index }: { lead: Lead; person: Person; index: number }) {
+function PersonBlock({
+  lead,
+  person,
+  index,
+  onDeleted,
+}: {
+  lead: Lead;
+  person: Person;
+  index: number;
+  /** Called after a delete, with what to tell screen readers. */
+  onDeleted: (message: string) => void;
+}) {
   const { actions, data, today } = useApp();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const d = t.deleteDialog;
   const emails = person.contacts.filter((contact) => contact.method === 'email');
   const others = person.contacts.filter((contact) => contact.method !== 'email');
   const emailedOn = person.emailedOn[0];
   const step = lead.status === 'emailed' ? nextStepFor(person, data.settings.cadence) : null;
   const followupDue = step?.kind === 'followup' && step.dueOn <= today ? step : null;
   const blockThem = personEntry(person.name, lead, today);
+  const remove = (block: boolean) => {
+    dialog.current?.close();
+    const done = actions.deletePerson(lead.key, index, person.name, block ? blockThem : null);
+    if (done) onDeleted(block ? t.deletedAndBlocked(person.name) : t.deleted(person.name));
+  };
 
   return (
     <li className="flex flex-col gap-2.5 rounded-tile bg-glass p-3.5">
@@ -183,7 +203,54 @@ function PersonBlock({ lead, person, index }: { lead: Lead; person: Person; inde
             {t.dontContact}
           </Button>
         )}
+        {/* FR-9.5: delete this person's name and contacts everywhere, and keep the lead. */}
+        <Button
+          variant="quiet"
+          aria-label={t.deletePersonFor(person.name)}
+          onClick={() => {
+            dialog.current?.showModal();
+            // The safe choice gets focus, not the first button (Delete).
+            cancel.current?.focus();
+          }}
+          className={cx('text-ink-2', !blockThem && 'ml-auto')}
+        >
+          {t.deletePerson}
+        </Button>
       </div>
+
+      <dialog
+        ref={dialog}
+        aria-labelledby={titleId}
+        className="m-auto w-[min(480px,calc(100vw-2*var(--gutter)))] rounded-card border border-hairline bg-sheet p-card text-foreground elev-overlay"
+      >
+        <div className="flex flex-col gap-4">
+          <h2 id={titleId} className="type-title">
+            {d.title(person.name)}
+          </h2>
+          <p className="max-w-[68ch] type-body">{d.body(lead.company)}</p>
+          <ul className="flex list-disc flex-col gap-1.5 pl-5">
+            {d.stays.map((line) => (
+              <li key={line} className="max-w-[68ch] text-ink-2 type-body">
+                {line}
+              </li>
+            ))}
+          </ul>
+          {/* Three choices don't fit on one line, so they stack. Focus starts on Cancel. */}
+          <div className="flex flex-col gap-2">
+            <Button variant="destructive" onClick={() => remove(false)} className="w-full justify-center">
+              {d.deleteOnly}
+            </Button>
+            {blockThem && (
+              <Button onClick={() => remove(true)} className="w-full justify-center">
+                {d.deleteAndBlock}
+              </Button>
+            )}
+            <Button ref={cancel} onClick={() => dialog.current?.close()} className="w-full justify-center">
+              {d.cancel}
+            </Button>
+          </div>
+        </div>
+      </dialog>
     </li>
   );
 }
@@ -214,6 +281,8 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
   const followupDue = reason?.kind === 'followup';
   const total = lead.people.length;
   const titleId = useId();
+  const [deleted, setDeleted] = useState('');
+  const people = useRef<HTMLDivElement>(null);
   const readBy = lead.sources.find((source) => source.readBy)?.readBy;
 
   return (
@@ -276,7 +345,10 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
         <p className="max-w-[68ch] type-body">{lead.fit || strings.unknown}</p>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div ref={people} tabIndex={-1} className="flex flex-col gap-2 outline-none">
+        <p role="status" className="sr-only">
+          {deleted}
+        </p>
         <SectionLabel aside={total > 0 ? t.peopleProgress(emailedCount(lead), total) : undefined}>
           {t.peopleLabel}
         </SectionLabel>
@@ -285,7 +357,17 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
         ) : (
           <ul className="flex flex-col gap-2">
             {lead.people.map((person, index) => (
-              <PersonBlock key={person.name} lead={lead} person={person} index={index} />
+              <PersonBlock
+                key={person.name}
+                lead={lead}
+                person={person}
+                index={index}
+                onDeleted={(message) => {
+                  setDeleted(message);
+                  // The person's block is gone, so focus moves to the section it was in.
+                  people.current?.focus();
+                }}
+              />
             ))}
           </ul>
         )}
