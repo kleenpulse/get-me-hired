@@ -2,13 +2,14 @@
 // the do-not-contact list (FR-5.7), sample mode, and "Delete everything"
 // behind a typed confirmation (FR-9.5).
 
-import { Ban, Check, Download, FileUp, FolderOpen, HardDrive, TriangleAlert, X } from 'lucide-react';
+import { Ban, Check, Download, FileUp, FolderOpen, HardDrive, Save, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { applyBlockList, readTypedEntry, sameEntry, type BlockEntry } from '@/core/block';
 import { INPUT } from '@/components/fields';
 import { Banner, Button, Card, IconButton } from '@/components/ui';
 import type { Incoming } from '../backup';
 import { canLinkFolder, pickFolder, readFolder, type FolderAccess, type LinkedFolder } from '../folder';
+import type { WritableFolder } from '../folder-write';
 import { clearFolderHandle, loadFolderHandle, saveFolderHandle } from '../storage';
 import { browserName, shortDate } from '../format';
 import { useApp } from '../state';
@@ -229,16 +230,18 @@ function ImportConfirm({
 }
 
 /**
- * FR-9.3, reading only for now: link the folder the agent skill writes to, and
- * read it in. Nothing is ever written to the folder, and the screen says so.
+ * FR-9.3: link the folder the agent skill writes to, read it in, and save to it.
+ * Opening and reading never change the folder; only Save writes, with the
+ * guards in folder-write.ts.
  */
 function FolderCard() {
+  const { data, today, actions } = useApp();
   const f = t.folder;
   const dialog = useRef<HTMLDialogElement>(null);
   const [folder, setFolder] = useState<LinkedFolder | null>(null);
   const [access, setAccess] = useState<FolderAccess | null>(null);
   const [pending, setPending] = useState<Incoming | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'reading' | 'saving' | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
   const supported = canLinkFolder();
 
@@ -261,9 +264,9 @@ function FolderCard() {
   }, [supported]);
 
   const read = async (handle: LinkedFolder) => {
-    setBusy(true);
+    setBusy('reading');
     setMessage(null);
-    const result = await readFolder(handle).finally(() => setBusy(false));
+    const result = await readFolder(handle).finally(() => setBusy(null));
     if (!result.ok) return setMessage({ tone: 'failure', text: f.problems[result.problem] });
     setPending(result.incoming);
     dialog.current?.showModal();
@@ -291,6 +294,34 @@ function FolderCard() {
     if (next === 'granted') await read(folder);
   };
 
+  const save = async () => {
+    if (!folder) return;
+    setMessage(null);
+    // Write access is asked for only here, from the click, and only when it isn't granted yet.
+    let allowed = await folder.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt' as const);
+    if (allowed !== 'granted') allowed = await folder.requestPermission({ mode: 'readwrite' }).catch(() => 'denied' as const);
+    if (allowed !== 'granted') return setMessage({ tone: 'failure', text: f.writeDenied });
+    setBusy('saving');
+    try {
+      const { writeFolder } = await import('../folder-write');
+      const result = await writeFolder(folder as unknown as WritableFolder, data, today);
+      if (!result.ok) return setMessage({ tone: 'failure', text: f.writeProblems[result.problem] });
+      // What the folder held comes into this browser too, by the same merge as Read.
+      if (result.incoming) await actions.importBackup(result.incoming, false);
+      setMessage({
+        tone: 'info',
+        text:
+          result.wrote === 0
+            ? f.nothingToSave
+            : f.saved(result.wrote, result.backedUp ? today : null, result.keptAsWritten, result.blockedRows, result.summary?.added ?? 0),
+      });
+    } catch {
+      setMessage({ tone: 'failure', text: f.writeProblems['write-failed'] });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const unlink = async () => {
     // Only the app's link goes. The folder and its files are left as they are.
     await clearFolderHandle().catch(() => {});
@@ -307,7 +338,7 @@ function FolderCard() {
       ) : (
         <>
           <p className="max-w-[68ch] type-body">{folder ? f.linked(folder.name) : f.body}</p>
-          <p className="max-w-[68ch] text-ink-2 type-caption">{f.readOnly}</p>
+          <p className="max-w-[68ch] text-ink-2 type-caption">{f.note}</p>
           <div className="flex flex-wrap gap-2">
             {!folder && (
               <Button icon={FolderOpen} onClick={() => void link()}>
@@ -315,9 +346,14 @@ function FolderCard() {
               </Button>
             )}
             {folder && access === 'granted' && (
-              <Button icon={FolderOpen} disabled={busy} onClick={() => void read(folder)}>
-                {busy ? f.reading : f.read}
-              </Button>
+              <>
+                <Button icon={FolderOpen} disabled={busy !== null} onClick={() => void read(folder)}>
+                  {busy === 'reading' ? f.reading : f.read}
+                </Button>
+                <Button icon={Save} disabled={busy !== null} onClick={() => void save()}>
+                  {busy === 'saving' ? f.saving : f.save}
+                </Button>
+              </>
             )}
             {folder && access !== 'granted' && (
               <Button icon={FolderOpen} onClick={() => void reconnect()}>

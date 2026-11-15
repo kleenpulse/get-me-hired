@@ -4,7 +4,7 @@ import { buildSampleFinds } from '@/core/sample-leads';
 import { ZIP_LIMITS } from '@/core/zip';
 import { backupFiles } from './backup';
 import { emptyData, type AppData } from './data';
-import { readFolder, type FolderHandle } from './folder';
+import { readFolder, RUNS_SCAN_LIMIT, type FolderHandle } from './folder';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 
@@ -105,5 +105,14 @@ describe('reading a linked folder (FR-9.3)', () => {
     expect(empty).toEqual({ ok: false, problem: 'not-backup' });
     const huge = await readFolder(standInFolder({ 'leads.csv': new Uint8Array(ZIP_LIMITS.entryBytes + 1) }, []));
     expect(huge).toEqual({ ok: false, problem: 'too-big' });
+  });
+
+  it('stops looking through runs/ past a cap on all its entries, reports or not', async () => {
+    const files: Record<string, Uint8Array> = { 'leads.csv': new TextEncoder().encode('found_on\n') };
+    for (let n = 0; n < RUNS_SCAN_LIMIT; n += 1) files[`runs/note-${n}.txt`] = new Uint8Array();
+    // At the cap, the folder still reads.
+    expect(await readFolder(standInFolder(files, []))).not.toEqual({ ok: false, problem: 'too-big' });
+    files['runs/one-more.txt'] = new Uint8Array();
+    expect(await readFolder(standInFolder(files, []))).toEqual({ ok: false, problem: 'too-big' });
   });
 });
