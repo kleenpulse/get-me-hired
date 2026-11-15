@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { pwa } from './pwa/vite-plugin';
+import { pwa } from './pwa/vite-plugin.ts';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
