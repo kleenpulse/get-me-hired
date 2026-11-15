@@ -111,7 +111,7 @@ export function cleanProfile(profile: Profile): Profile {
     skipCompanies: items(profile.skipCompanies),
     skipRoles: items(profile.skipRoles),
     proofLinks: profile.proofLinks
-      .map((link) => ({ url: oneLine(link.url), line: oneLine(link.line) }))
+      .map((link) => ({ url: trimUrl(oneLine(link.url)), line: oneLine(link.line) }))
       .filter((link) => link.url || link.line),
     background: profile.background.map(oneLine).filter(Boolean),
   };
@@ -241,7 +241,8 @@ function readProofLink(text: string): ProofLink | null {
   const url = trimUrl(found[0]);
   const before = text.slice(0, found.index).replace(/\s*[:—–-]?\s*$/, '');
   // Only one separator goes: a line that itself starts or ends with a dash keeps it.
-  const after = text.slice(found.index + url.length).replace(/^\s*(?:[—–-](?=\s|$)|:)\s?/, '');
+  // Whatever trimUrl dropped goes too, so "https://x.dev. — a line" reads as "a line".
+  const after = text.slice(found.index + found[0].length).replace(/^\s*(?:[—–-](?=\s|$)|:)\s?/, '');
   return { url, line: oneLine(before || after) };
 }
 

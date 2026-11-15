@@ -140,6 +140,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [saveFailed, setSaveFailed] = useState(false);
   const [loadFailed, setLoadFailed] = useState<AppState['loadFailed']>(false);
   const [savingOff, setSavingOff] = useState(false);
+  // The same flag for the actions, which are made once and don't see new renders.
+  const savingOffRef = useRef(false);
   const [hunt, setHunt] = useState<HuntState>(IDLE_HUNT);
 
   const today = localDate(now);
@@ -305,6 +307,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Skips the welcome screens: their last step says data is saved, which isn't true now.
       continueWithoutSaving: () => {
+        savingOffRef.current = true;
         setSavingOff(true);
         setLoadFailed(false);
         setData((current) => ({ ...current, settings: { ...current.settings, welcomeDone: true } }));
@@ -312,8 +315,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       deleteEverything: async () => {
         huntControl.current?.abort();
-        await clearData();
+        // With saving off there is nothing stored, and storage would refuse the request anyway.
+        if (!savingOffRef.current) await clearData();
         const fresh = emptyData();
+        // With saving off, the welcome screens stay skipped: their last step says data is saved.
+        if (savingOffRef.current) fresh.settings.welcomeDone = true;
         loaded.current = fresh;
         setHunt(IDLE_HUNT);
         setData(fresh);

@@ -19,6 +19,9 @@ export class StorageBlockedError extends Error {
   }
 }
 
+// When the database version first goes past 1: add `onblocked` (an old tab
+// holding version 1 would otherwise leave this one at "Loading your leads…"),
+// and turn a `VersionError` into `NewerDataError`, not `StorageBlockedError`.
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') return reject(new StorageBlockedError());

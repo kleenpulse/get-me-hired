@@ -363,6 +363,9 @@ export const strings = {
     saved: 'Profile saved.',
     unsaved: 'You have changes that are not saved yet.',
     allSaved: 'All changes are saved.',
+    /** With saving off, the profile lives only until the tab closes. */
+    savedForNow: 'Profile kept for this visit. Saving is off, so it is lost when you close this tab.',
+    allSavedForNow: 'Saving is off. Download profile.md to keep a copy.',
     fixFirst: 'Fix the proof links marked below, then save.',
     leave: 'Your profile has changes that are not saved. Leave without saving?',
     file: {
@@ -403,6 +406,8 @@ export const strings = {
         unknown: 'Checking how safely your data is stored…',
       },
       warning: 'If you clear this browser’s data, your leads are deleted too. Backups come in a later version.',
+      savingOff: (browser: string) =>
+        `Saving is off: ${browser} is not letting Get Me Hired store data. Your leads and profile last only until you close this tab.`,
     },
     sample: {
       title: 'Sample data',
@@ -420,6 +425,7 @@ export const strings = {
       typeLabel: 'Type DELETE to confirm',
       word: 'DELETE',
       confirm: 'Delete everything',
+      failed: 'Your data could not be deleted, and nothing was changed. Try again.',
       cancel: 'Keep my data',
     },
     browsers: { chrome: 'Chrome', edge: 'Edge', firefox: 'Firefox', safari: 'Safari', other: 'this browser' },
