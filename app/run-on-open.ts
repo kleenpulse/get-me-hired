@@ -6,6 +6,7 @@ import { missingFields } from '@/core/profile';
 import type { ProviderId } from '@/core/providers';
 import { capAllowsStart, capState } from './cap';
 import type { AppData } from './data';
+import { anySourceOn } from './sources';
 
 /**
  * True when opening the app should start today's hunt: the setting is on, a
@@ -18,6 +19,8 @@ import type { AppData } from './data';
 export function shouldRunOnOpen(data: Pick<AppData, 'settings' | 'profile' | 'runs'>, keyProviders: readonly ProviderId[], today: string): boolean {
   const { settings, profile, runs } = data;
   if (!settings.runOnOpen || !settings.welcomeDone || settings.sampleMode) return false;
+  // Every source off: a hunt would search nothing, and its empty run would block the day.
+  if (!anySourceOn(settings)) return false;
   const provider = settings.provider;
   if (!provider || !keyProviders.includes(provider)) return false;
   if (!profile || missingFields(profile).length > 0) return false;

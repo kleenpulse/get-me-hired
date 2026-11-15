@@ -53,6 +53,7 @@ import { addFound, applyBlocks } from './found';
 import { browserLocks, withHuntLock } from './hunt-lock';
 import { unsavedScreen } from './router';
 import { shouldRunOnOpen } from './run-on-open';
+import { anySourceOn, huntSources } from './sources';
 import { TabSync } from './tab-sync';
 import { usd } from './format';
 import { strings } from './strings';
@@ -88,7 +89,7 @@ interface Actions {
   /** Runs the app in memory only, after the browser refused to store data. */
   continueWithoutSaving: () => void;
   /** Changes settings that save as they're made: the daily target, the cadence, the display (FR-10.2, FR-10.5). */
-  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display' | 'monthlyCap' | 'runOnOpen'>>) => void;
+  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display' | 'monthlyCap' | 'runOnOpen' | 'sources'>>) => void;
   /**
    * Adds entries to the do-not-contact list (FR-5.7) and applies them to saved
    * leads at once: leads on a blocked domain are removed, and blocked people and
@@ -437,10 +438,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 fetch: window.fetch.bind(window),
                 knownKeys: new Set(leads.map((lead) => lead.key)),
                 blockList: latest.current.doNotContact,
-                // Off for now: Gemini's page reader can't see links, so no round can be confirmed
-                // at its own article (AC-4.6), and the stage would spend a minute to keep nothing.
-                // It comes back on with a page reader that returns links (Firecrawl, FR-2.3). FRD §19.
-                sources: { funding: false },
+                // The user's switches (FR-10.3). Funding stays off: Gemini's page reader can't see
+                // links, so no round can be confirmed at its own article (AC-4.6). It comes back
+                // with a page reader that returns links (Firecrawl, FR-2.3). FRD §19.
+                sources: huntSources(latest.current.settings),
                 // Checked before every model call. A free model has no cap to reach.
                 ...(cap && cap.kind === 'ok' ? { cap: { usd: cap.cap, spentUsd: cap.spent.usd } } : {}),
               }),
@@ -508,6 +509,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const key = provider ? keys.current[provider] : undefined;
     // A real hunt needs a provider with a saved key and a complete profile (FR-3.6).
     if (!sample && (!provider || !key || !profile || missingFields(profile).length > 0)) return;
+    // Every source off: a real hunt would search nothing, so it doesn't start. Today says why.
+    if (!sample && !anySourceOn(settings)) return;
     // A real hunt that could go past this month's cap doesn't start (AC-4.13). Today says why.
     const today = localDate(new Date());
     const cap = !sample && provider ? capState(latest.current, provider, today) : null;

@@ -23,6 +23,7 @@ import { LeadCard } from '@/components/LeadCard';
 import { Banner, Button, Card, cx, EmptyState, StatusPill, type Icon } from '@/components/ui';
 import { capAllowsStart, capState, type CapState } from '../cap';
 import { clockTime, usd } from '../format';
+import { anySourceOn } from '../sources';
 import { Link } from '../router';
 import { useApp, type HuntState } from '../state';
 import { strings } from '../strings';
@@ -194,9 +195,11 @@ export function Today() {
   const provider = data.settings.provider;
   const hasKey = provider !== null && keyProviders.includes(provider);
   // A real hunt needs a complete profile and a saved key (FR-3.6). A sample hunt needs neither.
-  const canHunt = sampleMode || (missing.length === 0 && hasKey);
+  // Every source off: a real hunt would search nothing (FR-10.3).
+  const sourcesOff = !sampleMode && !anySourceOn(data.settings);
+  const canHunt = sampleMode || (missing.length === 0 && hasKey && !sourcesOff);
   // The estimate before every real hunt, and the monthly cap (FR-4.13, AC-4.13).
-  const cap = !sampleMode && provider && hasKey && missing.length === 0 ? capState(data, provider, today) : null;
+  const cap = !sampleMode && provider && hasKey && missing.length === 0 && !sourcesOff ? capState(data, provider, today) : null;
   const capOk = cap === null || capAllowsStart(cap);
 
   const empty =
@@ -264,9 +267,11 @@ export function Today() {
               ? t.sampleHuntNote
               : missing.length > 0
                 ? t.huntNeedsProfile(missing)
-                : hasKey
-                  ? t.huntReady
-                  : t.huntNeedsKey}
+                : !hasKey
+                  ? t.huntNeedsKey
+                  : sourcesOff
+                    ? t.sourcesOff
+                    : t.huntReady}
           </p>
           {cap && (
             <p id="hunt-cost" className={cx('type-caption', capOk ? 'text-ink-2' : 'text-foreground')}>

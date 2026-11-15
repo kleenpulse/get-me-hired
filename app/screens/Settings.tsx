@@ -32,7 +32,7 @@ import {
   MONTHLY_CAP_RANGE,
 } from '@/core/settings-bounds';
 import { ChoicePills, INPUT } from '@/components/fields';
-import { Banner, Button, Card, cx, IconButton, StatusPill } from '@/components/ui';
+import { Banner, Button, Card, cx, IconButton, StatusPill, Tag } from '@/components/ui';
 import { TEXT_SIZES, THEMES } from '../display';
 import { usd } from '../format';
 import { useApp } from '../state';
@@ -339,6 +339,7 @@ export function Settings() {
       <div className="grid gap-gutter md:grid-cols-2 md:items-start">
         <DayCard />
         <div className="flex flex-col gap-gutter">
+          <SourcesCard />
           <SpendCard />
           <LookCard />
         </div>
@@ -503,6 +504,49 @@ function DayCard() {
 }
 
 /** FR-10.5: theme and text size, applied at once. */
+/** A source that can't run yet: shown as off, with why, never as a switch that does nothing. */
+function UnavailableSource({ name, why }: { name: string; why: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="type-label">{name}</span>
+        <Tag>{t.sources.unavailable}</Tag>
+      </div>
+      <p className="max-w-[68ch] text-ink-2 type-caption">{why}</p>
+    </div>
+  );
+}
+
+/** FR-10.3: sources on or off. Only the Hacker News thread can run today. */
+function SourcesCard() {
+  const { data, actions } = useApp();
+  const s = t.sources;
+  const sources = data.settings.sources;
+  return (
+    <Card aria-labelledby="sources-title" className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1 border-b border-hairline pb-4">
+        <h2 id="sources-title" className="type-title">
+          {s.title}
+        </h2>
+        <p className="max-w-[68ch] text-ink-2 type-caption">{s.caption}</p>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <ChoicePills
+          label={s.community}
+          name="source-community"
+          options={['off', 'on'] as const}
+          labels={s.choices}
+          value={sources.community ? 'on' : 'off'}
+          onChange={(value) => actions.updateSettings({ sources: { ...sources, community: value === 'on' } })}
+        />
+        <p className="max-w-[68ch] text-ink-2 type-caption">{s.communityHelp}</p>
+      </div>
+      <UnavailableSource name={s.funding} why={s.fundingWhy} />
+      <UnavailableSource name={s.posts} why={s.postsWhy} />
+    </Card>
+  );
+}
+
 /**
  * FR-10.2: the monthly spending cap (AC-4.13), in whole dollars at the list
  * price. It says plainly that the app can't see whether the key is billed.

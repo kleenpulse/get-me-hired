@@ -67,6 +67,18 @@ export const strings = {
       closes: (count: number) =>
         `With these rules, ${plural(count, 'emailed lead', 'emailed leads')} would move to No reply today. Save anyway?`,
     },
+    sources: {
+      title: 'Sources',
+      caption: 'Where a hunt looks. It saves as you choose.',
+      community: 'Hacker News “Who is hiring?” thread',
+      choices: { off: 'Off', on: 'On' },
+      communityHelp: 'Openings posted in this month’s thread, checked against your profile.',
+      unavailable: 'Not available yet',
+      funding: 'Funding news',
+      fundingWhy: 'Off until the app has a page reader that returns links, so each round can be checked at its own article.',
+      posts: 'Fresh hiring posts',
+      postsWhy: 'Off until the app can use web search, which needs a billed key.',
+    },
     spend: {
       title: 'Spending',
       caption: 'A limit on what hunts can cost each month. It saves as you type.',
@@ -239,6 +251,7 @@ export const strings = {
     huntReady:
       'This version reads the Hacker News hiring thread and checks each opening against your profile. Fresh posts and funding news come later.',
     sampleHuntNote: 'A sample hunt searches nothing and sends nothing to any service.',
+    sourcesOff: 'Every source is off. Turn one on in Settings.',
     huntCost: (estimate: string, spent: string, cap: string) =>
       `A hunt costs about ${estimate} at the list price, if your key is billed. This month so far: ${spent} of your ${cap} cap.`,
     huntCostFree: 'This model is free, so hunts don’t count toward your monthly cap.',
