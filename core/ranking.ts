@@ -3,7 +3,7 @@
 // This module returns facts (group, age, tier, due date). The app turns them
 // into sentences, because all interface text lives in one file (NFR-9).
 
-import type { Attention, Lead, Signal, Tier } from './lead';
+import { isRemovedPerson, isScrubbed, type Attention, type Lead, type Signal, type Tier } from './lead';
 import { DEFAULT_CADENCE, followupsDue, type Cadence } from './lifecycle';
 
 const HOUR_MS = 3_600_000;
@@ -95,8 +95,9 @@ export function countDoneToday(leads: readonly Lead[], today: string): TodayList
   return { emailed, followups };
 }
 
+/** People not emailed yet. The "(removed)" stand-in retention leaves isn't anyone to write to. */
 function waitingPeople(lead: Lead): number {
-  return lead.people.filter((person) => person.emailedOn.length === 0).length;
+  return lead.people.filter((person) => person.emailedOn.length === 0 && !isRemovedPerson(person)).length;
 }
 
 /**
@@ -105,6 +106,8 @@ function waitingPeople(lead: Lead): number {
  * the day ends, it leaves the list and lives on the Board.
  */
 function isOpenNewLead(lead: Lead, today: string): boolean {
+  // A closed lead whose people retention removed, moved back to New, has nobody to write to.
+  if (isScrubbed(lead)) return false;
   if (lead.status === 'new') return true;
   if (lead.status !== 'emailed') return false;
   const startedToday = lead.people.some((person) => person.emailedOn[0] === today);

@@ -116,6 +116,19 @@ export interface Lead {
   sample: boolean;
 }
 
+/** The name that stands in for the people retention removed from a closed lead (FR-9.7, app/retention.ts). */
+export const REMOVED = '(removed)';
+
+/** True for the stand-in retention leaves in place of a lead's people: nobody to write to. */
+export function isRemovedPerson(person: Person): boolean {
+  return person.name === REMOVED && person.contacts.length === 0;
+}
+
+/** True once retention has replaced a lead's people with the one stand-in. */
+export function isScrubbed(lead: Pick<Lead, 'people'>): boolean {
+  return lead.people.length === 1 && lead.people[0] !== undefined && isRemovedPerson(lead.people[0]);
+}
+
 /** The email addresses on a lead, across all its people. */
 export function emailContacts(lead: Lead): Contact[] {
   return lead.people.flatMap((person) => person.contacts.filter((contact) => contact.method === 'email'));
