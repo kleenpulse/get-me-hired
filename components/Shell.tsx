@@ -2,7 +2,7 @@
 // bottom bar on narrow ones (DESIGN.md, Layout).
 
 import { CalendarCheck, Columns3, Database, Ellipsis, FileCheck, History, Settings, UserRound } from 'lucide-react';
-import { motion } from 'motion/react';
+import * as m from 'motion/react-m';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link, type Route } from '@/app/router';
 import { strings } from '@/app/strings';
@@ -34,7 +34,7 @@ function NavItem({ item, active, bar }: { item: (typeof ITEMS)[number]; active: 
     >
       {/* One shared tile that slides between items. */}
       {active && (
-        <motion.span
+        <m.span
           layoutId={bar ? 'nav-tile-bar' : 'nav-tile-rail'}
           aria-hidden
           className="absolute inset-0 rounded-tile bg-card"

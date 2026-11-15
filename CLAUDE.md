@@ -101,6 +101,8 @@ The app shares its method and file format with the `get-me-hired` agent skill, a
 | `bun run typecheck` | Check types (`tsc --noEmit`) |
 | `bun run spike` | Serve the provider spike page at http://localhost:5183. Keys come from `.env.local` (see `.env.example`). |
 
+Build from the repo root with `bun run build` (what Netlify runs). An absolute `--outDir` with a different drive-letter case (`D:` vs `d:`) duplicates modules, React contexts included. Motion loads lazily: use `m` from `motion/react-m` inside the `LazyMotion` in `app/App.tsx` (strict), never `motion.*`, or the full library goes back into the first load.
+
 Before saying a screen works, run it in a real browser at 1280px and at 360px, in light and dark, and check the console. `bun run preview` doesn't send the security headers from `netlify.toml`: to test the policy, serve `dist/` with those headers.
 
 ## Styling notes

@@ -1,5 +1,5 @@
 import { RefreshCw, TriangleAlert } from 'lucide-react';
-import { MotionConfig } from 'motion/react';
+import { LazyMotion, MotionConfig } from 'motion/react';
 import { lazy, Suspense, useEffect, useRef } from 'react';
 import { ScreenBoundary } from '@/components/ScreenBoundary';
 import { Shell } from '@/components/Shell';
@@ -19,6 +19,8 @@ const History = lazy(() => import('./screens/History').then((module) => ({ defau
 const Profile = lazy(() => import('./screens/Profile').then((module) => ({ default: module.Profile })));
 const Data = lazy(() => import('./screens/Data').then((module) => ({ default: module.Data })));
 const Settings = lazy(() => import('./screens/Settings').then((module) => ({ default: module.Settings })));
+
+const loadMotionFeatures = () => import('./motion-features').then((module) => module.default);
 
 const TITLES: Record<Route, string> = {
   today: strings.nav.today,
@@ -92,6 +94,9 @@ export function App() {
   return (
     // `reducedMotion="user"` turns slides and springs off when the system asks (NFR-1).
     <MotionConfig reducedMotion="user">
+      {/* motion's features load in their own chunk after the first paint (motion-features.ts). `strict`
+          keeps any full `motion.*` component from pulling them back into the main chunk. */}
+      <LazyMotion features={loadMotionFeatures} strict>
       {!welcomed ? (
         <Welcome />
       ) : (
@@ -138,6 +143,7 @@ export function App() {
           </ScreenBoundary>
         </Shell>
       )}
+      </LazyMotion>
     </MotionConfig>
   );
 }
