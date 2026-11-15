@@ -15,6 +15,7 @@ import { INPUT } from '@/components/fields';
 import { UndoToast } from '@/components/UndoToast';
 import { droppedLead, DRAG_TYPE } from '../board-drop';
 import { roleText } from '../format';
+import { isScrubbed } from '../retention';
 import { Link } from '../router';
 import { useApp, type MoveRecord } from '../state';
 import { strings } from '../strings';
@@ -56,7 +57,7 @@ function Tile({
   canDrag: boolean;
   onDragChange: (key: string | null) => void;
 }) {
-  const total = lead.people.length;
+  const total = isScrubbed(lead) ? 0 : lead.people.length;
   return (
     // Dragging is a shortcut for a pointer on wide screens. The "Move to" menu below
     // does the same move by keyboard and on phones (AC-6.3, FR-6.14).

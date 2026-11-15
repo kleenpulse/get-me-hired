@@ -295,6 +295,22 @@ describe('the monthly cap in a backup (AC-4.13)', () => {
     }
   });
 
+  it('carries the retention period in range, and which reports retention deleted (FR-9.7)', async () => {
+    const data: AppData = {
+      ...emptyData(),
+      settings: { ...emptyData().settings, retentionDays: 90 },
+      runs: [{ at: '2026-01-10T09:00:00.000Z', date: '2026-01-10', status: 'completed', kept: 2, dropped: [], sample: false, reportExpired: true }],
+    };
+    const result = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!result.ok) throw new Error('backup unreadable');
+    expect(result.incoming.settings?.retentionDays).toBe(90);
+    expect(result.incoming.runs[0]).toMatchObject({ reportExpired: true, kept: 2 });
+    for (const bad of [29, 366, 90.5, '90', null]) {
+      const incoming = await read({ settings: { ...settings(5), retention_days: bad } });
+      expect(incoming.settings).not.toHaveProperty('retentionDays');
+    }
+  });
+
   it('carries the source switches, and takes only a real true or false (FR-10.3)', async () => {
     const data: AppData = { ...emptyData(), settings: { ...emptyData().settings, sources: { community: false } } };
     const result = await readBackup(backupZip(data, NOW), inflateRaw);

@@ -7,7 +7,7 @@ import type { Lead } from '@/core/lead';
 import { DEFAULT_CADENCE, type Cadence } from '@/core/lifecycle';
 import { emptyProfile, type Profile } from '@/core/profile';
 import type { ProviderId } from '@/core/providers';
-import { isValidMonthlyCap } from '@/core/settings-bounds';
+import { DEFAULT_RETENTION_DAYS, isValidMonthlyCap, isValidRetentionDays } from '@/core/settings-bounds';
 import { DEFAULT_SOURCES, isSourceSwitches, type SourceSwitches } from './sources';
 
 export const FORMAT_VERSION = 1;
@@ -29,6 +29,8 @@ export interface Settings {
   monthlyCap: number;
   /** Start today's hunt when the app is opened and it hasn't run yet (FR-4.2). Off until the user turns it on. */
   runOnOpen: boolean;
+  /** Days the people on closed leads, and run reports, are kept (FR-9.7). */
+  retentionDays: number;
   /** Sources switched on or off (FR-10.3). Funding news and fresh posts can't run yet, so they aren't here. */
   sources: SourceSwitches;
   /** The local date of the last backup download, for the 7-day reminder (FR-9.2). */
@@ -62,6 +64,8 @@ export interface RunRecord {
   listCost?: number | null;
   /** Calls in the run that didn't report their tokens, so `listCost` leaves them out. */
   unreported?: number;
+  /** True once the report was deleted under retention (FR-9.7). The counts stay. */
+  reportExpired?: boolean;
   /** The run report (FR-8.1) as Markdown, and its file name in `runs/`. Hunts from before reports have none. */
   report?: string;
   reportName?: string;
@@ -100,6 +104,7 @@ export function emptyData(): AppData {
       dailyTarget: DEFAULT_DAILY_TARGET,
       monthlyCap: DEFAULT_MONTHLY_CAP,
       runOnOpen: false,
+      retentionDays: DEFAULT_RETENTION_DAYS,
       sources: DEFAULT_SOURCES,
       cadence: DEFAULT_CADENCE,
       provider: null,
@@ -126,6 +131,7 @@ export function withDefaults(saved: AppData): AppData {
       display: isDisplay(saved.settings?.display) ? saved.settings.display : DEFAULT_DISPLAY,
       monthlyCap: isValidMonthlyCap(saved.settings?.monthlyCap) ? saved.settings.monthlyCap : DEFAULT_MONTHLY_CAP,
       runOnOpen: saved.settings?.runOnOpen === true,
+      retentionDays: isValidRetentionDays(saved.settings?.retentionDays) ? saved.settings.retentionDays : DEFAULT_RETENTION_DAYS,
       sources: isSourceSwitches(saved.settings?.sources) ? { community: saved.settings.sources.community } : DEFAULT_SOURCES,
     },
   };

@@ -11,6 +11,9 @@ export const MAX_FOLLOWUPS = 3;
 export const CLOSE_RANGE = { min: 3, max: 10 } as const;
 /** People to write to in a day (FR-4.14). */
 export const DAILY_TARGET_RANGE = { min: 1, max: 100 } as const;
+/** Days the people on a closed lead, and run reports, are kept (FR-9.7, FRD §13.2). */
+export const RETENTION_RANGE = { min: 30, max: 365 } as const;
+export const DEFAULT_RETENTION_DAYS = 180;
 /** The monthly spending cap, in whole US dollars at the list price (FR-10.2, AC-4.13). */
 export const MONTHLY_CAP_RANGE = { min: 1, max: 500 } as const;
 
@@ -31,6 +34,10 @@ export function isValidCadence(value: unknown): value is Cadence {
 
 export function isValidDailyTarget(value: unknown): value is number {
   return isWholeIn(value, DAILY_TARGET_RANGE);
+}
+
+export function isValidRetentionDays(value: unknown): value is number {
+  return isWholeIn(value, RETENTION_RANGE);
 }
 
 export function isValidMonthlyCap(value: unknown): value is number {
