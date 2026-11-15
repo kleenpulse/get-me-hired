@@ -17,7 +17,7 @@ export interface HuntStep {
   /** How many items the step handled. `null` until it is known. */
   count: number | null;
   /** Why a `skipped` step didn't run. */
-  skipReason?: 'needs-search' | 'not-built';
+  skipReason?: 'needs-search' | 'needs-page-reader' | 'switched-off' | 'not-built';
 }
 
 /** Why a lead was dropped (FRD §9.1). Every dropped lead has exactly one. */
@@ -57,6 +57,8 @@ export interface HuntResult {
   problem?: KeyProblem | 'hn-down';
   /** Openings that could not be read because their batch failed. Counted apart from those checked. */
   unread?: number;
+  /** Sources that couldn't be searched today, by host name (FR-4.11). The rest of the run still finished. */
+  failedSources?: string[];
 }
 
 export interface HuntOptions {

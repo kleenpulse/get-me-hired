@@ -4,9 +4,10 @@
 import { describe, expect, it } from 'vitest';
 import { COMMENTS, ITEM_ANSWER, SEARCH_ANSWER, THREAD_ID } from '@/fixtures/hn-thread';
 import { commentUrl, htmlToText, profileWords, shortlist } from './hn';
-import { asData, createHnHunt, judge, type Verdict } from './hn-hunt';
+import { asData, judge, type Verdict } from './hn-hunt';
 import type { HuntProgress, HuntResult } from './hunt';
 import { emptyProfile, type Profile } from './profile';
+import { createRealHunt } from './real-hunt';
 
 const KEY = 'test-key-not-real-0000';
 const NOW = new Date('2026-11-15T09:00:00Z');
@@ -128,7 +129,15 @@ function standIn(calls: Call[], options: { gemini?: (body: string) => Response; 
 
 async function hunt(fetcher: typeof fetch, knownKeys: Set<string> = new Set(), signal = new AbortController().signal) {
   const progress: HuntProgress[] = [];
-  const result = await createHnHunt({ provider: 'gemini', key: KEY, profile: PROFILE, fetch: fetcher, knownKeys })({
+  const result = await createRealHunt({
+    provider: 'gemini',
+    key: KEY,
+    profile: PROFILE,
+    fetch: fetcher,
+    knownKeys,
+    // Funding has its own tests. Here only the HN stage runs.
+    sources: { funding: false },
+  })({
     now: NOW,
     signal,
     onProgress: (step) => progress.push(step),
@@ -215,7 +224,7 @@ describe('the HN hunt (FR-4.7)', () => {
     expect(result.steps.map((step) => [step.id, step.state, step.skipReason ?? null, step.count])).toEqual([
       ['posts', 'skipped', 'needs-search', null],
       ['freshness', 'skipped', 'needs-search', null],
-      ['funding', 'skipped', 'not-built', null],
+      ['funding', 'skipped', 'switched-off', null],
       ['community', 'done', null, 5],
       ['contacts', 'done', null, 2],
     ]);

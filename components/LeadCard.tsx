@@ -6,6 +6,7 @@ import { Banknote, Briefcase, Check, Clock, Copy, Mail, MapPin, ThumbsUp } from 
 import { useEffect, useId, useState } from 'react';
 import { emailedCount, type Contact, type Lead, type Person, type Signal } from '@/core/lead';
 import { nextStepFor } from '@/core/lifecycle';
+import { PROVIDERS } from '@/core/providers';
 import { newGroupOf, type TodayReason } from '@/core/ranking';
 import { ageText, freshness, roleText, roundAgeText, shortDate, whyLine } from '@/app/format';
 import { useApp } from '@/app/state';
@@ -198,6 +199,7 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
   const followupDue = reason?.kind === 'followup';
   const total = lead.people.length;
   const titleId = useId();
+  const readBy = lead.sources.find((source) => source.readBy)?.readBy;
 
   return (
     <Card as={as} aria-labelledby={titleId} className={cx('flex flex-col gap-4', className)}>
@@ -234,6 +236,8 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
         <StatPill icon={Briefcase} value={roleText(lead)} name={t.facts.role} />
         <StatPill icon={MapPin} value={lead.location || strings.unknown} name={t.facts.location} />
       </div>
+      {/* Facts an AI read for the app, which the app could not check itself (principle 2). */}
+      {readBy && <p className="max-w-[68ch] text-ink-2 type-caption">{t.readBy(PROVIDERS[readBy].name)}</p>}
 
       {lead.signals.length > 0 && (
         <div className="flex flex-col gap-2">
