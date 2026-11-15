@@ -2,7 +2,7 @@
 // which has no IndexedDB, so each test puts in a stand-in.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadData, NewerDataError, StorageBlockedError } from './storage';
+import { loadData, loadKeys, NewerDataError, StorageBlockedError } from './storage';
 
 /** A stand-in for `indexedDB.open` that fails the way a blocking browser does. */
 function failingOpen(error: DOMException): Pick<IDBFactory, 'open'> {
@@ -80,5 +80,17 @@ describe('loading saved data', () => {
   it('returns null on a first visit', async () => {
     vi.stubGlobal('indexedDB', openWith(undefined));
     expect(await loadData()).toBeNull();
+  });
+});
+
+describe('loading keys', () => {
+  it('keeps only known providers with a key', async () => {
+    vi.stubGlobal('indexedDB', openWith({ gemini: 'key-a', openrouter: 5, someone: 'key-b', anthropic: '' }));
+    expect(await loadKeys()).toEqual({ gemini: 'key-a' });
+  });
+
+  it('has no keys on a first visit', async () => {
+    vi.stubGlobal('indexedDB', openWith(undefined));
+    expect(await loadKeys()).toEqual({});
   });
 });

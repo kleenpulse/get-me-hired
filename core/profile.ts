@@ -117,9 +117,14 @@ export function cleanProfile(profile: Profile): Profile {
   };
 }
 
-/** A proof link must start with http:// or https:// (it becomes a link). */
+/**
+ * A proof link must start with http:// or https:// (it becomes a link). It is
+ * judged as it will be saved, after trailing punctuation goes, so "https://."
+ * fails here instead of being saved as "https://".
+ */
 export function isProofUrl(url: string): boolean {
-  return /^https?:\/\/\S+$/i.test(url.trim()) && URL.canParse(url.trim());
+  const saved = trimUrl(url.trim());
+  return /^https?:\/\/\S+$/i.test(saved) && URL.canParse(saved);
 }
 
 /** Proof links that can't be saved: a line with no link, or a link that isn't a web address. */

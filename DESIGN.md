@@ -295,7 +295,7 @@ Rules:
 | Part | 1024px and up | Under 1024px |
 |---|---|---|
 | Frame | Floats on `--band` with a gutter-wide margin, radius 34px, max width 1600px | Fills the screen, radius 0 |
-| Navigation | Left rail, 104px wide, on `--sheet`, no border | Bottom bar, 64px tall, 4 items plus "More" |
+| Navigation | Left rail, 104px wide, on `--sheet`, no border | Bottom bar, 64px tall, up to 5 items. Once there are more (Draft checker, History), it shows 4 plus "More" |
 | Rail order | Today, Board, Draft checker, History. Then pinned to the bottom: Profile, Data and backup, Settings | Today, Board, Draft checker, More |
 | Rail dividers | A 20px-wide hairline between groups, not between every item | None |
 

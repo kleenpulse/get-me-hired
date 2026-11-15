@@ -1,11 +1,13 @@
 // Browser storage (FR-9.1). Everything is one record in IndexedDB, written in
 // one transaction, so a closed tab can never leave half a save behind (NFR-7).
 
+import { isProviderId, type ProviderId } from '@/core/providers';
 import { FORMAT_VERSION, withDefaults, type AppData } from './data';
 
 const DATABASE = 'get-me-hired';
 const STORE = 'app';
 const RECORD = 'data';
+const KEYS_RECORD = 'keys';
 
 /**
  * The browser won't let the app store anything: there is no IndexedDB, or
@@ -72,8 +74,29 @@ export async function saveData(data: AppData): Promise<void> {
   await transact('readwrite', (store) => store.put(data, RECORD));
 }
 
+/** Clears the whole store: the data and the keys (FR-9.5). */
 export async function clearData(): Promise<void> {
   await transact('readwrite', (store) => store.clear());
+}
+
+/**
+ * Provider keys live in a record of their own, never inside `AppData`, so no
+ * export, backup or log of the data can carry them (FRD §11.1, NFR-3).
+ */
+export type StoredKeys = Partial<Record<ProviderId, string>>;
+
+export async function loadKeys(): Promise<StoredKeys> {
+  const saved = await transact<unknown>('readonly', (store) => store.get(KEYS_RECORD));
+  const keys: StoredKeys = {};
+  if (typeof saved !== 'object' || saved === null) return keys;
+  for (const [id, value] of Object.entries(saved)) {
+    if (isProviderId(id) && typeof value === 'string' && value) keys[id] = value;
+  }
+  return keys;
+}
+
+export async function saveKeys(keys: StoredKeys): Promise<void> {
+  await transact('readwrite', (store) => store.put(keys, KEYS_RECORD));
 }
 
 /** Whether the browser promised to keep this site's data when space runs low. */

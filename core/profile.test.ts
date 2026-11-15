@@ -211,9 +211,10 @@ describe('cleaning a profile before it is saved', () => {
         { url: '', line: 'A line with no link' },
         { url: 'javascript:alert(1)', line: 'Not a web address' },
         { url: '', line: '' },
+        { url: 'https://.', line: 'Only punctuation after the scheme' },
       ],
     };
-    expect(badProofLinks(profile)).toEqual([1, 2]);
+    expect(badProofLinks(profile)).toEqual([1, 2, 4]);
   });
 });
 
