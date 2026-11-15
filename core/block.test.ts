@@ -67,7 +67,7 @@ describe('reading what the user types', () => {
   it('refuses shared hosts as domains, since that would hit everyone on them', () => {
     expect(readTypedEntry('gmail.com', DAY)).toEqual({ ok: false, reason: 'shared' });
     expect(readTypedEntry('news.ycombinator.com', DAY)).toEqual({ ok: false, reason: 'shared' });
-    for (const host of ['yahoo.co.uk', 'hotmail.fr', 'outlook.de', 'live.ca', 'ymail.com', 'pm.me', 'web.de', 'qq.com', 'mail.yahoo.com']) {
+    for (const host of ['yahoo.co.uk', 'hotmail.fr', 'outlook.de', 'live.ca', 'ymail.com', 'pm.me', 'web.de', 'qq.com', 'mail.yahoo.com', 'mail.yahoo.co.uk', 'sub.hotmail.fr']) {
       expect(readTypedEntry(host, DAY)).toEqual({ ok: false, reason: 'shared' });
     }
     // A company whose name merely starts with a brand is not a shared host.
