@@ -37,13 +37,18 @@ export function isWorkingDay(day: string): boolean {
   return weekday !== 0 && weekday !== 6;
 }
 
+/** The most working days `addWorkingDays` will add: about a year and a half. */
+export const MAX_WORKING_DAYS = 366;
+
 /**
  * The date `count` working days after `day`. The start day itself is not
  * counted, so 5 working days after a Monday is the next Monday (AC-6.4).
  */
 export function addWorkingDays(day: string, count: number): string {
   let current = day;
-  let left = count;
+  // At most a year of working days. The walk is one day at a time, so a huge count
+  // from a bad file must never reach it: it would freeze the app (FRD §8.2 delays are 3 to 10).
+  let left = Number.isFinite(count) ? Math.min(Math.max(0, Math.floor(count)), MAX_WORKING_DAYS) : 0;
   while (left > 0) {
     current = addDays(current, 1);
     if (isWorkingDay(current)) left -= 1;

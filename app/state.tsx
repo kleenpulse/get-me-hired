@@ -39,6 +39,8 @@ import {
   type Persistence,
   type StoredKeys,
 } from './storage';
+import type { Incoming, MergeSummary } from './backup';
+import { downloadBlob } from './download';
 import { reportFileName, writeRunReport } from './run-report';
 import { strings } from './strings';
 
@@ -66,6 +68,10 @@ interface Actions {
   saveProfile: (profile: Profile) => void;
   /** Runs the app in memory only, after the browser refused to store data. */
   continueWithoutSaving: () => void;
+  /** Downloads a backup ZIP of the real data, and notes the date (FR-9.2). */
+  exportBackup: () => Promise<void>;
+  /** Brings a read backup in, merged by lead key (FR-6.8). Resolves with what happened. */
+  importBackup: (incoming: Incoming, replaceProfile: boolean) => Promise<MergeSummary>;
   /** Stores a key that passed its test and makes its provider the one hunts use. Rejects if storage fails. */
   saveKey: (provider: ProviderId, key: string) => Promise<void>;
   /** Deletes a key from storage at once (AC-10.1). Rejects if storage fails. */
@@ -427,6 +433,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setStatus: (key, status) => update(key, (lead, moment) => setStatus(lead, status, localDate(moment), moment)),
 
       saveProfile: (profile) => setData((current) => ({ ...current, profile: cleanProfile(profile) })),
+
+      // The backup code loads only when it's used, so the first page load doesn't pay for it.
+      exportBackup: async () => {
+        const { backupFileName, backupZip } = await import('./backup');
+        const now = new Date();
+        const bytes = backupZip(latest.current, now);
+        downloadBlob(backupFileName(localDate(now)), new Blob([new Uint8Array(bytes)], { type: 'application/zip' }));
+        setData((current) => ({ ...current, settings: { ...current.settings, lastBackupOn: localDate(now) } }));
+      },
+
+      importBackup: async (incoming, replaceProfile) => {
+        const { mergeBackup } = await import('./backup');
+        const { data: merged, summary } = mergeBackup(latest.current, incoming, replaceProfile);
+        latest.current = merged;
+        setData(merged);
+        return summary;
+      },
 
       // Skips the welcome screens: their last step says data is saved, which isn't true now.
       continueWithoutSaving: () => {

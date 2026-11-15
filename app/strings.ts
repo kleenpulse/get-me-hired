@@ -618,9 +618,41 @@ export const strings = {
         unsupported: 'This browser cannot promise to keep your data when space runs low.',
         unknown: 'Checking how safely your data is stored…',
       },
-      warning: 'If you clear this browser’s data, your leads are deleted too. Backups come in a later version.',
+      warning: 'If you clear this browser’s data, your leads are deleted too. Keep a backup somewhere safe.',
       savingOff: (browser: string) =>
         `Saving is off: ${browser} is not letting Get Me Hired store data. Your leads and profile last only until you close this tab.`,
+    },
+    backup: {
+      title: 'Backup',
+      body: 'One ZIP file with your profile, your leads and your hunt reports, in the same files the Get Me Hired skill uses. Your keys are never in it, and neither are sample leads.',
+      export: 'Download a backup',
+      import: 'Open a backup',
+      last: (date: string) => `Last backup: ${date}.`,
+      never: 'No backup yet.',
+      reading: 'Reading the backup…',
+      confirmTitle: 'Bring in this backup?',
+      contents: (leads: number, reports: number, profile: boolean) =>
+        `It holds ${plural(leads, 'lead', 'leads')}, ${plural(reports, 'report', 'reports')}${profile ? ' and a profile' : ''}.`,
+      mergeNote:
+        'Leads you already have stay as they are: their status, emailed dates and notes are yours. Only new leads, and history this browser lacks, are added.',
+      replaceProfile: 'Replace my profile with the one in the backup',
+      confirm: 'Bring it in',
+      cancel: 'Cancel',
+      done: (added: number, here: number, runs: number) =>
+        `Added ${plural(added, 'lead', 'leads')} and ${plural(runs, 'report', 'reports')}. ${here > 0 ? `${plural(here, 'lead was', 'leads were')} already here, and yours were kept.` : ''}`.trim(),
+      profileDone: { added: 'The profile was added.', replaced: 'Your profile was replaced.', kept: 'Your profile was kept.', none: '' },
+      reviewDone: (count: number) => `${plural(count, 'row needs', 'rows need')} a look: see the notes on those leads.`,
+      problems: {
+        'not-zip': "This file isn't a Get Me Hired backup: it isn't a ZIP file.",
+        'not-backup': "This file isn't a Get Me Hired backup: it has none of the backup's files.",
+        newer: 'This backup is from a newer version of Get Me Hired. Update the app first.',
+        damaged: 'This backup is damaged, so nothing was brought in.',
+        'too-big': 'This file is too big to be a backup, so nothing was brought in.',
+        unsupported: 'This ZIP uses a kind of compression the app can’t read. Zip the files again with your computer’s own zip tool.',
+      },
+      reminder: (days: number) => `It's been ${days} days since your last backup. Download one, so your leads are safe if this browser's data is cleared.`,
+      reminderNever: 'You have no backup yet. Download one, so your leads are safe if this browser’s data is cleared.',
+      reminderAction: 'Go to backup',
     },
     sample: {
       title: 'Sample data',
