@@ -176,3 +176,26 @@ describe('the funding stage (FR-4.6)', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe('the funding stage under the monthly cap (AC-4.13)', () => {
+  it('is skipped, not run, when its page reads have no cost bound', async () => {
+    const calls: string[] = [];
+    const fetcher = (async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      throw new TypeError('should not be called');
+    }) as typeof fetch;
+    const result = await createRealHunt({
+      provider: 'gemini',
+      key: KEY,
+      profile: emptyProfile(),
+      fetch: fetcher,
+      knownKeys: new Set(),
+      sources: { community: false },
+      fundingListings: [LISTING_URL],
+      cap: { usd: 500, spentUsd: 0 },
+    })({ now: NOW, signal: new AbortController().signal, onProgress: () => {} });
+    expect(calls).toEqual([]);
+    expect(result.status).toBe('completed');
+    expect(result.steps.find((step) => step.id === 'funding')).toMatchObject({ state: 'skipped', skipReason: 'no-cost-bound' });
+  });
+});

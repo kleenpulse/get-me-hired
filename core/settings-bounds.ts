@@ -11,6 +11,8 @@ export const MAX_FOLLOWUPS = 3;
 export const CLOSE_RANGE = { min: 3, max: 10 } as const;
 /** People to write to in a day (FR-4.14). */
 export const DAILY_TARGET_RANGE = { min: 1, max: 100 } as const;
+/** The monthly spending cap, in whole US dollars at the list price (FR-10.2, AC-4.13). */
+export const MONTHLY_CAP_RANGE = { min: 1, max: 500 } as const;
 
 export function isWholeIn(value: unknown, range: { min: number; max: number }): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= range.min && value <= range.max;
@@ -29,4 +31,8 @@ export function isValidCadence(value: unknown): value is Cadence {
 
 export function isValidDailyTarget(value: unknown): value is number {
   return isWholeIn(value, DAILY_TARGET_RANGE);
+}
+
+export function isValidMonthlyCap(value: unknown): value is number {
+  return isWholeIn(value, MONTHLY_CAP_RANGE);
 }

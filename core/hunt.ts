@@ -18,7 +18,7 @@ export interface HuntStep {
   /** How many items the step handled. `null` until it is known. */
   count: number | null;
   /** Why a `skipped` step didn't run. */
-  skipReason?: 'needs-search' | 'needs-page-reader' | 'switched-off' | 'not-built';
+  skipReason?: 'needs-search' | 'needs-page-reader' | 'switched-off' | 'not-built' | 'no-cost-bound';
 }
 
 /** Why a lead was dropped (FRD §9.1). Every dropped lead has exactly one. */
@@ -48,20 +48,32 @@ export interface HuntProgress {
   dropped: number;
 }
 
+/**
+ * Why a hunt stopped: a provider problem (AC-4.11), Hacker News not answering,
+ * or this month's spending cap (AC-4.13).
+ */
+export type HuntProblem = KeyProblem | 'hn-down' | 'cap-reached';
+
 export interface HuntResult {
   /** `cancelled` keeps whatever was found before the user stopped it (AC-4.10). */
   status: 'completed' | 'cancelled' | 'failed';
   leads: Lead[];
   dropped: DroppedLead[];
   steps: HuntStep[];
-  /** Why a `failed` hunt stopped: a provider problem (AC-4.11), or Hacker News not answering. */
-  problem?: KeyProblem | 'hn-down';
+  /** Why a `failed` hunt stopped. */
+  problem?: HuntProblem;
   /** Openings that could not be read because their batch failed. Counted apart from those checked. */
   unread?: number;
   /** Sources that couldn't be searched today, by host name (FR-4.11). The rest of the run still finished. */
   failedSources?: string[];
   /** Model calls and tokens, summed from the SDK's reports (FR-4.13). */
   usage?: Usage;
+  /**
+   * What the run cost at the list price, in US dollars, with every call that
+   * reported no tokens counted at the most it could have cost, never at $0.
+   * `null` for a model with no known price. The monthly cap adds this up (AC-4.13).
+   */
+  chargedUsd?: number | null;
 }
 
 export interface HuntOptions {

@@ -5,6 +5,7 @@
 import type { DropReason, HuntStepId } from '@/core/hunt';
 import type { Attention, ContactLabel, LeadStatus, Signal, Tier } from '@/core/lead';
 import type { RemotePreference, RequiredField } from '@/core/profile';
+import type { HuntProblem } from '@/core/hunt';
 import type { CheckResult, KeyProblem, ProviderChecks, ProviderId } from '@/core/providers';
 import type { NewGroup, TodayGroup } from '@/core/ranking';
 
@@ -61,6 +62,17 @@ export const strings = {
       saved: 'Follow-up rules saved.',
       closes: (count: number) =>
         `With these rules, ${plural(count, 'emailed lead', 'emailed leads')} would move to No reply today. Save anyway?`,
+    },
+    spend: {
+      title: 'Spending',
+      caption: 'A limit on what hunts can cost each month. It saves as you type.',
+      cap: 'Monthly cap in US dollars',
+      capHelp: (min: number, max: number) => `A whole number from ${min} to ${max}. A hunt stops before it could go past it.`,
+      capBad: (min: number, max: number) => `Use a whole number from ${min} to ${max}.`,
+      billing: (checkedOn: string) =>
+        `Costs are worked out at each provider's list price, from prices checked on ${checkedOn}. The app can't see whether your key is billed. On a free tier you pay nothing, but hunts still count toward the cap here.`,
+      month: (spent: string, cap: string) => `This month so far: about ${spent} of your ${cap} cap.`,
+      partial: 'Some calls didn’t report what they used, so the real total may be higher.',
     },
     look: {
       title: 'Look',
@@ -223,6 +235,13 @@ export const strings = {
     huntReady:
       'This version reads the Hacker News hiring thread and checks each opening against your profile. Fresh posts and funding news come later.',
     sampleHuntNote: 'A sample hunt searches nothing and sends nothing to any service.',
+    huntCost: (estimate: string, spent: string, cap: string) =>
+      `A hunt costs about ${estimate} at the list price, if your key is billed. This month so far: ${spent} of your ${cap} cap.`,
+    huntCostFree: 'This model is free, so hunts don’t count toward your monthly cap.',
+    capReached: (cap: string) => `You've reached this month's cap of ${cap}. Raise it in Settings, or wait for next month.`,
+    overCap: (cap: string) =>
+      `This hunt could go past this month's cap of ${cap}. Raise the cap in Settings, or wait for next month.`,
+    noPrice: "This model's cost isn't known, so your monthly cap can't be kept. Choose another provider in Settings.",
     leftOut: (count: number) =>
       `${plural(count, 'more lead is', 'more leads are')} waiting. They will show once you get through today's list.`,
     empty: {
@@ -283,6 +302,7 @@ export const strings = {
       'not-built': 'Not built yet',
       'needs-page-reader': "Needs Gemini's page reader",
       'switched-off': 'Off for now',
+      'no-cost-bound': "Its cost can't be kept under your cap",
     },
     tally: (kept: number, dropped: number) => `Kept ${kept} · Dropped ${dropped}`,
     cancel: 'Cancel',
@@ -295,8 +315,16 @@ export const strings = {
     unread: (count: number) =>
       `We couldn't check ${plural(count, 'possible lead', 'possible leads')} this time. Run the hunt again later to try them.`,
     /** Why a hunt stopped, in one or two sentences. Shared by the banner and the run report. */
-    failedWhy: (problem: KeyProblem | 'hn-down', provider: string) =>
-      problem === 'hn-down'
+    failedWhy: (problem: HuntProblem, provider: string, cap?: { usd: string; partial: boolean }) =>
+      problem === 'cap-reached'
+        ? [
+            cap ? `You've reached this month's cap of ${cap.usd}.` : "You've reached this month's spending cap.",
+            cap?.partial ? 'Some calls didn’t report what they used, so the real total may be higher.' : '',
+            'Raise it in Settings, or wait for next month.',
+          ]
+            .filter(Boolean)
+            .join(' ')
+        : problem === 'hn-down'
         ? "Hacker News isn't answering right now. Try again later."
         : problem === 'rate-limited'
           ? `${provider} asked us to slow down. Try again in a few minutes.`
@@ -308,8 +336,8 @@ export const strings = {
                 ? `We couldn't reach ${provider}. Check your internet connection.`
                 : `Something went wrong with ${provider}. Try again.`,
     keptBeforeStop: (kept: number) => `${plural(kept, 'lead', 'leads')} found before it stopped ${kept === 1 ? 'was' : 'were'} kept.`,
-    failed: (problem: KeyProblem | 'hn-down', provider: string, kept: number) =>
-      [`The hunt stopped.`, strings.hunt.failedWhy(problem, provider), kept > 0 ? strings.hunt.keptBeforeStop(kept) : '']
+    failed: (problem: HuntProblem, provider: string, kept: number, cap?: { usd: string; partial: boolean }) =>
+      [`The hunt stopped.`, strings.hunt.failedWhy(problem, provider, cap), kept > 0 ? strings.hunt.keptBeforeStop(kept) : '']
         .filter(Boolean)
         .join(' '),
   },

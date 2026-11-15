@@ -20,7 +20,7 @@ import { normaliseUrl } from '@/core/lead-key';
 import { leadToRow, rowToLead } from '@/core/lead-row';
 import { LEAD_STATUSES, parseLeadsCsv, writeLeadsCsv } from '@/core/leads-csv';
 import type { Cadence } from '@/core/lifecycle';
-import { isValidCadence, isValidDailyTarget } from '@/core/settings-bounds';
+import { isValidCadence, isValidDailyTarget, isValidMonthlyCap, MONTHLY_CAP_RANGE } from '@/core/settings-bounds';
 import { looksLikeProfileMd, readProfileMd, writeProfileMd, type Profile } from '@/core/profile';
 import { isProviderId } from '@/core/providers';
 import { readZip, writeZip, ZipError, type Inflate, type ZipFile } from '@/core/zip';
@@ -62,12 +62,15 @@ interface RunExtras {
   provider: string | null;
   problem: string | null;
   report_name: string | null;
+  /** The run's cost at the list price in US dollars, for the monthly cap. `null` when the model's price isn't known. */
+  list_cost?: number | null;
+  unreported?: number;
 }
 
 interface Extras {
   format_version: number;
   app_version: string;
-  settings: { daily_target: number; cadence: Cadence };
+  settings: { daily_target: number; cadence: Cadence; monthly_cap: number };
   leads: Record<string, LeadExtras>;
   runs: RunExtras[];
   do_not_contact: string[];
@@ -83,7 +86,7 @@ export function backupFiles(data: AppData): ZipFile[] {
   const extras: Extras = {
     format_version: FORMAT_VERSION,
     app_version: APP_VERSION,
-    settings: { daily_target: data.settings.dailyTarget, cadence: data.settings.cadence },
+    settings: { daily_target: data.settings.dailyTarget, cadence: data.settings.cadence, monthly_cap: data.settings.monthlyCap },
     leads: Object.fromEntries(
       leads.map((lead) => [
         lead.key,
@@ -111,6 +114,8 @@ export function backupFiles(data: AppData): ZipFile[] {
       provider: run.provider ?? null,
       problem: run.problem ?? null,
       report_name: run.report && run.reportName ? run.reportName : null,
+      ...(run.listCost !== undefined ? { list_cost: run.listCost } : {}),
+      ...(run.unreported !== undefined ? { unreported: run.unreported } : {}),
     })),
     do_not_contact: data.doNotContact.map(blockEntryText),
   };
@@ -140,7 +145,7 @@ export interface Incoming {
   profile: Profile | null;
   leads: Lead[];
   runs: RunRecord[];
-  settings: { dailyTarget: number; cadence: Cadence } | null;
+  settings: { dailyTarget: number; cadence: Cadence; monthlyCap?: number } | null;
   /** Rows the lenient reader marked "Needs review". */
   needsReview: number;
   /** The backup's do-not-contact list, each line checked (FR-5.7). */
@@ -219,6 +224,10 @@ function withExtras(lead: Lead, extras: unknown): Lead {
   };
 }
 
+function isRunCost(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MONTHLY_CAP_RANGE.max;
+}
+
 function readRun(value: unknown, reports: Map<string, string>): RunRecord | null {
   if (!isObject(value) || !isString(value.at) || !isDay(value.date)) return null;
   const status = value.status === 'completed' || value.status === 'cancelled' || value.status === 'failed' ? value.status : null;
@@ -241,6 +250,10 @@ function readRun(value: unknown, reports: Map<string, string>): RunRecord | null
       : [],
     sample: false,
     provider,
+    // A cost that isn't a sane dollar figure counts as unknown, never as $0 (AC-4.13). No one run
+    // can cost more than the highest cap, so a bigger figure is not believed either.
+    ...(value.list_cost === undefined ? {} : { listCost: isRunCost(value.list_cost) ? value.list_cost : null }),
+    ...(Number.isInteger(value.unreported) && (value.unreported as number) >= 0 ? { unreported: value.unreported as number } : {}),
     ...(report && reportName ? { report, reportName } : {}),
   };
 }
@@ -257,6 +270,8 @@ function readSettings(value: unknown): Incoming['settings'] {
   return {
     dailyTarget: value.daily_target,
     cadence: { followupDelays: [...value.cadence.followupDelays], closeAfter: value.cadence.closeAfter },
+    // Older backups have no cap, and one outside 1 to 500 dollars is ignored: the cap set here stays.
+    ...(isValidMonthlyCap(value.monthly_cap) ? { monthlyCap: value.monthly_cap } : {}),
   };
 }
 

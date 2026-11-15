@@ -20,10 +20,21 @@ import {
   type ProviderId,
 } from '@/core/providers';
 import { closedByCadence } from '@/core/lifecycle';
-import { CLOSE_RANGE, DAILY_TARGET_RANGE, DELAY_RANGE, isValidDailyTarget, isWholeIn } from '@/core/settings-bounds';
+import { spentThisMonth } from '@/core/budget';
+import { PRICES_CHECKED_ON } from '@/core/prices';
+import {
+  CLOSE_RANGE,
+  DAILY_TARGET_RANGE,
+  DELAY_RANGE,
+  isValidDailyTarget,
+  isValidMonthlyCap,
+  isWholeIn,
+  MONTHLY_CAP_RANGE,
+} from '@/core/settings-bounds';
 import { ChoicePills, INPUT } from '@/components/fields';
 import { Banner, Button, Card, cx, IconButton, StatusPill } from '@/components/ui';
 import { TEXT_SIZES, THEMES } from '../display';
+import { usd } from '../format';
 import { useApp } from '../state';
 import { strings } from '../strings';
 
@@ -327,7 +338,10 @@ export function Settings() {
 
       <div className="grid gap-gutter md:grid-cols-2 md:items-start">
         <DayCard />
-        <LookCard />
+        <div className="flex flex-col gap-gutter">
+          <SpendCard />
+          <LookCard />
+        </div>
       </div>
     </div>
   );
@@ -476,6 +490,46 @@ function DayCard() {
 }
 
 /** FR-10.5: theme and text size, applied at once. */
+/**
+ * FR-10.2: the monthly spending cap (AC-4.13), in whole dollars at the list
+ * price. It says plainly that the app can't see whether the key is billed.
+ */
+function SpendCard() {
+  const { data, today, actions } = useApp();
+  const s = t.spend;
+  const [cap, setCap] = useState(String(data.settings.monthlyCap));
+  const capOk = isValidMonthlyCap(asWhole(cap));
+  const spent = spentThisMonth(data.runs, today);
+
+  return (
+    <Card aria-labelledby="spend-title" className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1 border-b border-hairline pb-4">
+        <h2 id="spend-title" className="type-title">
+          {s.title}
+        </h2>
+        <p className="max-w-[68ch] text-ink-2 type-caption">{s.caption}</p>
+      </div>
+
+      <NumberField
+        label={s.cap}
+        help={s.capHelp(MONTHLY_CAP_RANGE.min, MONTHLY_CAP_RANGE.max)}
+        error={capOk ? null : s.capBad(MONTHLY_CAP_RANGE.min, MONTHLY_CAP_RANGE.max)}
+        value={cap}
+        onChange={(text) => {
+          setCap(text);
+          const value = asWhole(text);
+          if (isValidMonthlyCap(value)) actions.updateSettings({ monthlyCap: value });
+        }}
+      />
+
+      <p className="max-w-[68ch] type-body">
+        {s.month(usd(spent.usd), usd(data.settings.monthlyCap))} {spent.partial ? s.partial : ''}
+      </p>
+      <p className="max-w-[68ch] text-ink-2 type-caption">{s.billing(PRICES_CHECKED_ON)}</p>
+    </Card>
+  );
+}
+
 function LookCard() {
   const { data, actions } = useApp();
   const l = t.look;

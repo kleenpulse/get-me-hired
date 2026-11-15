@@ -79,3 +79,9 @@ export function roleText(lead: Pick<Lead, 'role' | 'type' | 'signals'>): string 
   if (lead.role) return lead.role;
   return lead.type === 'funding' && lead.signals.includes('no-open-role') ? strings.lead.facts.noRole : strings.unknown;
 }
+
+/** A dollar amount: "$2" when whole, "$0.03", or "$0.0042" under a cent, as in the run report. */
+export function usd(amount: number): string {
+  if (Number.isInteger(amount)) return `$${amount}`;
+  return amount < 0.01 ? `$${amount.toFixed(4)}` : `$${amount.toFixed(2)}`;
+}

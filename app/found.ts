@@ -2,10 +2,12 @@
 // so each one works on the data as it is at that moment, never on a snapshot.
 
 import { applyBlockList, sameEntry, type BlockEntry } from '@/core/block';
+import { spentThisMonth } from '@/core/budget';
 import { localDate } from '@/core/dates';
 import type { DroppedLead, HuntResult } from '@/core/hunt';
 import type { Lead } from '@/core/lead';
-import type { ProviderId } from '@/core/providers';
+import { paidCost } from '@/core/prices';
+import { PROVIDERS, type ProviderId } from '@/core/providers';
 import type { AppData, RunRecord } from './data';
 import { reportFileName, writeRunReport } from './run-report';
 
@@ -32,6 +34,12 @@ export function addFound(data: AppData, result: HuntResult, now: Date, sample: b
 
   const date = localDate(now);
   const leads = [...data.leads, ...fresh];
+  const usage = result.usage;
+  // A hunt stopped at the monthly cap says which cap, and whether the total is a lower bound (AC-4.13).
+  const cap =
+    result.problem === 'cap-reached'
+      ? { usd: data.settings.monthlyCap, partial: spentThisMonth(data.runs, date).partial || (usage?.unreported ?? 0) > 0 }
+      : undefined;
   // Sample hunts are numbered apart, since they are never exported with real ones (FR-1.4).
   const earlier = data.runs.filter((run) => run.date === date && run.sample === sample).length;
   const report = writeRunReport({
@@ -46,9 +54,19 @@ export function addFound(data: AppData, result: HuntResult, now: Date, sample: b
     failedSources: result.failedSources ?? [],
     unread: result.unread ?? 0,
     usage: result.usage ?? null,
+    ...(cap ? { cap } : {}),
     leads,
     cadence: data.settings.cadence,
   });
+  // What the run cost at the list price, for the monthly cap (AC-4.13). The hunt's own
+  // figure counts calls that reported nothing at their bound, so they aren't $0 next
+  // time. A hunt that couldn't load made no calls. A sample hunt calls nothing.
+  const listCost =
+    sample || !provider || !usage
+      ? 0
+      : result.chargedUsd !== undefined
+        ? result.chargedUsd
+        : paidCost(PROVIDERS[provider].model, usage);
   const run: RunRecord = {
     at: now.toISOString(),
     date,
@@ -58,6 +76,8 @@ export function addFound(data: AppData, result: HuntResult, now: Date, sample: b
     sample,
     provider: sample ? null : provider,
     ...(result.problem ? { problem: result.problem } : {}),
+    listCost,
+    unreported: sample ? 0 : (usage?.unreported ?? 0),
     report,
     reportName: reportFileName(date, earlier),
   };
