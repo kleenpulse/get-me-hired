@@ -101,6 +101,15 @@ function waitingPeople(lead: Lead): number {
 }
 
 /**
+ * How many people a listed lead counts toward the daily target: those waiting,
+ * and at least 1 for a lead with nobody found yet. A lead whose people
+ * retention removed counts 0: it can show as a reminder, but there's nobody to write to.
+ */
+function peopleToList(lead: Lead): number {
+  return isScrubbed(lead) ? 0 : Math.max(1, waitingPeople(lead));
+}
+
+/**
  * A lead belongs in the "new" part of Today while nobody was emailed, or while
  * the user is partway through its people today. Once everyone is emailed, or
  * the day ends, it leaves the list and lives on the Board.
@@ -158,7 +167,7 @@ export function buildToday(leads: readonly Lead[], options: TodayOptions): Today
         lead,
         group: 'attention',
         reason: { kind: 'attention', attention: lead.attention },
-        people: Math.max(1, waitingPeople(lead)),
+        people: peopleToList(lead),
       });
     } else if (isOpenNewLead(lead, today)) {
       const group = newGroupOf(lead);
@@ -166,7 +175,7 @@ export function buildToday(leads: readonly Lead[], options: TodayOptions): Today
         lead,
         group,
         reason: { kind: 'new', group, ageHours: ageHours(lead, nowMs), tier: lead.tier },
-        people: Math.max(1, waitingPeople(lead)),
+        people: peopleToList(lead),
       });
     }
   }

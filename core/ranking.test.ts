@@ -336,6 +336,15 @@ describe('a lead whose people retention removed (FR-9.7)', () => {
     expect(list.entries.reduce((sum, entry) => sum + entry.people, 0)).toBe(1);
   });
 
+  it('can be listed as a reminder when it comes back, but takes no slot of the daily target', () => {
+    const back = { ...lead({ company: 'Tidewell', people: [removed] }), status: 'emailed' as const, attention: 'back-from-not-now' as const };
+    const list = buildToday([back, lead({ company: 'Northpeak' })], { today: TODAY, nowMs: NOW_MS, dailyTarget: 1 });
+    expect(list.entries.map((entry) => [entry.lead.company, entry.people])).toEqual([
+      ['Tidewell', 0],
+      ['Northpeak', 1],
+    ]);
+  });
+
   it('is told apart from a real person, and from a lead with nobody found yet', () => {
     expect(isScrubbed(lead({ company: 'Real', people: [person('published', 'Ada Quill')] }))).toBe(false);
     expect(isScrubbed(lead({ company: 'Nobody', people: [] }))).toBe(false);
