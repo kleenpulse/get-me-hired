@@ -2,7 +2,7 @@
 // lead and leaves its input unchanged.
 
 import { addDays, addWorkingDays } from './dates';
-import type { Lead, LeadStatus, Person } from './lead';
+import type { Lead, LeadStatus, Person, StatusChange } from './lead';
 
 /** Follow-up timing, in working days (FRD §8.2 rule 2, decision D7). */
 export interface Cadence {
@@ -125,6 +125,30 @@ export function setStatus(
   return { ...moved, snoozeUntil: null, attention: null };
 }
 
+/**
+ * Undoes a manual move (FR-6.13), as a guarded inverse on the lead as it is
+ * now. It applies only while that move is still the lead's latest change: its
+ * status, and its own history entry last. Then the status, return date and flag
+ * go back, and that one entry comes off. Anything else done in the meantime (a
+ * person marked emailed, a source added) is kept. Returns `null` when the lead
+ * has moved again since, so Undo can say it can't.
+ */
+export function undoStatus(lead: Lead, before: Lead, move: StatusChange): Lead | null {
+  const last = lead.statusHistory.at(-1);
+  if (lead.status !== move.status || !last || last.status !== move.status || last.at !== move.at) return null;
+  const history = lead.statusHistory.slice(0, -1);
+  // §8.2 rule 1: a lead with someone emailed is "emailed". If a person was marked
+  // in the meantime, going back to "new" would break that, so it lands on "emailed".
+  const emailedSince = before.status === 'new' && lead.people.some((person) => person.emailedOn.length > 0);
+  return {
+    ...lead,
+    status: emailedSince ? 'emailed' : before.status,
+    statusHistory: emailedSince ? [...history, { status: 'emailed', at: move.at }] : history,
+    snoozeUntil: before.snoozeUntil,
+    attention: before.attention,
+  };
+}
+
 /** The status a "Not now" lead had before it was parked. */
 function statusBeforeSnooze(lead: Lead): LeadStatus {
   for (let index = lead.statusHistory.length - 1; index >= 0; index--) {
@@ -135,12 +159,6 @@ function statusBeforeSnooze(lead: Lead): LeadStatus {
 }
 
 /**
- * The two moves the app makes on its own (§8.2 rule 6):
- *   - `emailed` becomes `no-reply` once every emailed person is past their last wait
- *   - `not-now` returns to its earlier status on its return date
- * Call it when the app opens and when the date changes.
- */
-/**
  * How many emailed leads a cadence would move to "no reply" today. Follow-up
  * dates are worked out from the emailed dates each time, so a shorter cadence
  * acts on the past: the Settings screen says how many before saving one.
@@ -149,6 +167,12 @@ export function closedByCadence(leads: readonly Lead[], today: string, now: Date
   return leads.filter((lead) => lead.status === 'emailed' && applyAutomaticMoves(lead, today, now, cadence).status === 'no-reply').length;
 }
 
+/**
+ * The two moves the app makes on its own (§8.2 rule 6):
+ *   - `emailed` becomes `no-reply` once every emailed person is past their last wait
+ *   - `not-now` returns to its earlier status on its return date
+ * Call it when the app opens and when the date changes.
+ */
 export function applyAutomaticMoves(lead: Lead, today: string, now: Date, cadence: Cadence = DEFAULT_CADENCE): Lead {
   if (lead.status === 'not-now' && lead.snoozeUntil !== null && lead.snoozeUntil <= today) {
     const back = withStatus(lead, statusBeforeSnooze(lead), now);

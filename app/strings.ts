@@ -428,6 +428,17 @@ export const strings = {
     count: (count: number) => plural(count, 'lead', 'leads'),
     emptyColumn: 'Nothing here.',
     moved: (company: string, status: string) => `${company} moved to ${status}.`,
+    undo: 'Undo',
+    undone: (company: string, status: string) => `${company} is back in ${status}.`,
+    cantUndo: (company: string) => `Can’t undo: ${company} changed since.`,
+    dismiss: 'Dismiss',
+    notNow: {
+      title: (company: string) => `Not now: when should ${company} come back?`,
+      body: 'On that date, the lead returns to Today under "Back from Not now", with the status it had before.',
+      date: 'Come back on',
+      confirm: 'Move to Not now',
+      cancel: 'Cancel',
+    },
     empty: {
       title: 'No leads yet',
       body: 'Leads show up here after a hunt.',
