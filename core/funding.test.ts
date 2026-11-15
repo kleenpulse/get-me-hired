@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { ARTICLE_PAGES, ARTICLES, LISTING_JSON, LISTING_TEXT, LISTING_URL } from '@/fixtures/funding-pages';
 import { parseDateLine, roundStage } from './funding';
-import type { HuntResult } from './hunt';
+import type { HuntProgress, HuntResult } from './hunt';
 import { emptyProfile } from './profile';
 import type { ProviderId } from './providers';
 import { createRealHunt } from './real-hunt';
@@ -197,5 +197,23 @@ describe('the funding stage under the monthly cap (AC-4.13)', () => {
     expect(calls).toEqual([]);
     expect(result.status).toBe('completed');
     expect(result.steps.find((step) => step.id === 'funding')).toMatchObject({ state: 'skipped', skipReason: 'no-cost-bound' });
+  });
+});
+
+describe('saving the funding stage as it goes (FR-4.15)', () => {
+  it('reports each call with the rounds kept by then, the last one holding them all', async () => {
+    const progress: HuntProgress[] = [];
+    const result = await createRealHunt({
+      provider: 'gemini',
+      key: KEY,
+      profile: { ...emptyProfile(), roles: ['Frontend engineer'], skills: ['React'], location: 'Lagos', floor: '$60k' },
+      fetch: standIn([]),
+      knownKeys: new Set(),
+      sources: { community: false },
+      fundingListings: [LISTING_URL],
+    })({ now: NOW, signal: new AbortController().signal, onProgress: (entry) => progress.push(entry) });
+    expect(result.leads.length).toBeGreaterThan(0);
+    const lastCall = progress.filter((entry) => entry.checkpoint?.usage.calls === result.usage?.calls)[0]?.checkpoint;
+    expect(lastCall?.leads.map((lead) => lead.key)).toEqual(result.leads.map((lead) => lead.key));
   });
 });

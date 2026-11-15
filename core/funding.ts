@@ -109,7 +109,12 @@ interface ListedRound {
 const RETRIEVED = 'URL_RETRIEVAL_STATUS_SUCCESS';
 
 /** How a call ended. `stop` is a key or account problem that ends the hunt. */
-type Call<T> = { kind: 'ok'; value: T } | { kind: 'failed' } | { kind: 'cancelled' } | { kind: 'stop'; problem: KeyProblem | 'cap-reached' };
+type Call<T> =
+  /** `charge` is set when the caller counts the call itself, once it has judged the answer (FR-4.15). */
+  | { kind: 'ok'; value: T; charge?: () => void }
+  | { kind: 'failed' }
+  | { kind: 'cancelled' }
+  | { kind: 'stop'; problem: KeyProblem | 'cap-reached' };
 
 function ended<T>(context: StageContext, error: unknown): Call<T> {
   if (context.signal.aborted) return { kind: 'cancelled' };
@@ -156,7 +161,14 @@ async function readPage(context: StageContext, url: string, ask: string): Promis
 }
 
 /** Call 2: no tools. Turns call 1's text, given only as data, into JSON. */
-async function toJson<S extends ZodType>(context: StageContext, text: string, ask: string, schema: S): Promise<Call<output<S>>> {
+async function toJson<S extends ZodType>(
+  context: StageContext,
+  text: string,
+  ask: string,
+  schema: S,
+  /** Leave the counting to the caller, so the progress saved with the call holds what it kept. */
+  chargeLater = false,
+): Promise<Call<output<S>>> {
   const { sdk, model, signal } = context;
   const prompt = `${ask}\n\n<text>\n${text.replace(/<(\/?)text\b/gi, '‹$1text')}\n</text>`;
   const bound = knownPromptBound([SYSTEM, prompt], MAX_OUTPUT_TOKENS);
@@ -171,7 +183,9 @@ async function toJson<S extends ZodType>(context: StageContext, text: string, as
       maxRetries: MAX_RETRIES,
       abortSignal: signal,
     });
-    context.addUsage(result.usage, bound);
+    const charge = () => context.addUsage(result.usage, bound);
+    if (chargeLater) return { kind: 'ok', value: result.output as output<S>, charge };
+    charge();
     return { kind: 'ok', value: result.output as output<S> };
   } catch (error) {
     return ended(context, error);
@@ -289,6 +303,7 @@ export async function runFundingStage(context: StageContext): Promise<StageEnd> 
       read.text,
       'Turn this text about one funding round into one entry. Copy every field exactly from the text. Use "" for a field the text gives as none.',
       articleSchema,
+      true,
     );
     if (parsed.kind === 'cancelled') return 'cancelled';
     if (parsed.kind === 'stop') return failed(context, checked, parsed.problem);
@@ -296,45 +311,50 @@ export async function runFundingStage(context: StageContext): Promise<StageEnd> 
       drop();
       continue;
     }
-    const article = parsed.value;
-    // The second read must name the same company, the same date and the same stage.
-    const sameCompany = isQuoted(company, read.text);
-    const articleDate = isQuoted(article.dateLine, read.text) ? parseDateLine(article.dateLine) : null;
-    const articleStage = isQuoted(article.round, read.text) ? roundStage(article.round) : 'unknown';
-    if (!sameCompany || articleDate !== date || articleStage !== stage) {
-      drop();
-      continue;
-    }
+    try {
+      const article = parsed.value;
+      // The second read must name the same company, the same date and the same stage.
+      const sameCompany = isQuoted(company, read.text);
+      const articleDate = isQuoted(article.dateLine, read.text) ? parseDateLine(article.dateLine) : null;
+      const articleStage = isQuoted(article.round, read.text) ? roundStage(article.round) : 'unknown';
+      if (!sameCompany || articleDate !== date || articleStage !== stage) {
+        drop();
+        continue;
+      }
 
-    // Amounts are short ("$3M"), under isQuoted's 4-character floor, so they are matched as a whole token.
-    const amount = amountIn(round.amount, read.text);
-    const headline = isQuoted(article.headline, read.text) ? article.headline.trim().slice(0, 200) : '';
-    const base = { type: 'funding' as const, people: [], signals: ['no-open-role' as const] };
-    const lead: Lead = {
-      ...base,
-      key: leadKey(url, company),
-      foundOn: today,
-      company,
-      companyUrl: '',
-      about: '',
-      role: '',
-      fit: '',
-      postedAt: `${date}T00:00:00.000Z`,
-      postedAtApprox: false,
-      likes: 'n/a',
-      round: [amount, stage].filter(Boolean).join(' '),
-      location: '',
-      hooks: headline ? [{ text: headline, url }] : [],
-      sources: [{ kind: 'funding', url, seen: today, readBy: settings.provider }],
-      tier: computeTier(base),
-      status: 'new',
-      statusHistory: [{ status: 'new', at: now.toISOString() }],
-      snoozeUntil: null,
-      attention: null,
-      notes: '',
-      sample: false,
-    };
-    context.keep(lead);
+      // Amounts are short ("$3M"), under isQuoted's 4-character floor, so they are matched as a whole token.
+      const amount = amountIn(round.amount, read.text);
+      const headline = isQuoted(article.headline, read.text) ? article.headline.trim().slice(0, 200) : '';
+      const base = { type: 'funding' as const, people: [], signals: ['no-open-role' as const] };
+      const lead: Lead = {
+        ...base,
+        key: leadKey(url, company),
+        foundOn: today,
+        company,
+        companyUrl: '',
+        about: '',
+        role: '',
+        fit: '',
+        postedAt: `${date}T00:00:00.000Z`,
+        postedAtApprox: false,
+        likes: 'n/a',
+        round: [amount, stage].filter(Boolean).join(' '),
+        location: '',
+        hooks: headline ? [{ text: headline, url }] : [],
+        sources: [{ kind: 'funding', url, seen: today, readBy: settings.provider }],
+        tier: computeTier(base),
+        status: 'new',
+        statusHistory: [{ status: 'new', at: now.toISOString() }],
+        snoozeUntil: null,
+        attention: null,
+        notes: '',
+        sample: false,
+      };
+      context.keep(lead);
+    } finally {
+      // Counted once this round is kept or dropped, so the progress saved with the call holds it (FR-4.15).
+      parsed.charge?.();
+    }
   }
 
   set('funding', { state: 'done', count: checked });

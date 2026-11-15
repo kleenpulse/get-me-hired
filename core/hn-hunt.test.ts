@@ -411,8 +411,9 @@ describe('saving a hunt as it goes (FR-4.15)', () => {
     expect(last?.usage.calls).toBe(result.usage?.calls);
     expect(last?.chargedUsd).toBeCloseTo(result.chargedUsd ?? -1);
     expect(last?.leads.map((lead) => lead.key)).toEqual(result.leads.map((lead) => lead.key));
-    // A report goes out right after the call lands, before the next step.
-    expect(progress.some((entry) => entry.checkpoint?.usage.calls === 1)).toBe(true);
+    // A report goes out as each call lands, already holding the leads that call found.
+    const firstCall = progress.find((entry) => entry.checkpoint?.usage.calls === 1)?.checkpoint;
+    expect(firstCall?.leads.map((lead) => lead.key)).toEqual(result.leads.map((lead) => lead.key));
   });
 });
 

@@ -541,16 +541,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           },
         }));
       }
-      // What it has found and spent is saved as it goes: on every model call, and at most once a
-      // second otherwise, so a closed tab still counts what it spent and keeps what it found.
-      let lastSaved = 0;
+      // What it has found and spent is saved when a model call lands: the cost changes only then,
+      // and the leads of that call come with it. That's about 10 saves a hunt, so other open tabs
+      // aren't made to read the data again every second. Step states stay in memory.
       let lastCalls = 0;
       const checkpoint = (progress: HuntProgress) => {
         const data = progress.checkpoint;
-        if (!real || !data) return;
-        const now = Date.now();
-        if (data.usage.calls === lastCalls && now - lastSaved < 1000) return;
-        lastSaved = now;
+        if (!real || !data || data.usage.calls === lastCalls) return;
         lastCalls = data.usage.calls;
         setData((current) =>
           current.huntInProgress ? { ...current, huntInProgress: { ...current.huntInProgress, ...data, steps: progress.steps } } : current,
