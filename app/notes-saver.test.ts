@@ -63,6 +63,34 @@ describe('saving notes as you type (FR-6.7)', () => {
   });
 });
 
+describe('saving when the page is hidden or closed', () => {
+  it('uses the write-at-once callback only from flushNow, and only for a real change', () => {
+    const later: string[] = [];
+    const now: string[] = [];
+    const saver = createNotesSaver((notes) => later.push(notes), 'kept', timers, (notes) => now.push(notes));
+    expect(saver.flushNow()).toBe(false);
+    saver.change('typed just before closing');
+    expect(saver.flushNow()).toBe(true);
+    vi.advanceTimersByTime(NOTES_SAVE_DELAY_MS * 2);
+    expect(now).toEqual(['typed just before closing']);
+    expect(later).toEqual([]);
+  });
+
+  it('never uses it on blur, after a pause or when the card goes away', () => {
+    const later: string[] = [];
+    const now: string[] = [];
+    const saver = createNotesSaver((notes) => later.push(notes), '', timers, (notes) => now.push(notes));
+    saver.change('a');
+    vi.advanceTimersByTime(NOTES_SAVE_DELAY_MS);
+    saver.change('ab');
+    saver.flush();
+    saver.change('abc');
+    saver.dispose();
+    expect(later).toEqual(['a', 'ab', 'abc']);
+    expect(now).toEqual([]);
+  });
+});
+
 describe('notes landing on data another tab saved', () => {
   const lead = (key: string, notes: string) => ({ key, notes }) as Lead;
 
