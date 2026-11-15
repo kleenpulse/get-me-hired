@@ -108,7 +108,11 @@ export function App() {
                 icon={RefreshCw}
                 action={<Button onClick={actions.dismissChangedElsewhere}>{strings.errors.dismiss}</Button>}
               >
-                {changedElsewhere === 'draft-kept' ? strings.errors.draftKept : strings.errors.changedElsewhere}
+                {changedElsewhere === 'draft-kept'
+                  ? strings.errors.draftKept
+                  : changedElsewhere === 'keys-locked'
+                    ? strings.errors.keysLocked
+                    : strings.errors.changedElsewhere}
               </Banner>
             </div>
           )}

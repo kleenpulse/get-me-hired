@@ -35,12 +35,14 @@ import { applyDisplay, clearDisplayCopy, DEFAULT_DISPLAY, writeDisplayCopy } fro
 import {
   clearData,
   loadData,
-  loadKeys,
   NewerDataError,
   StorageBlockedError,
   readPersistence,
   requestPersistence,
   saveData,
+  saveSealedKeys,
+  loadKeyRecord,
+  type KeyRecord,
   saveKeys,
   type Persistence,
   type StoredKeys,
@@ -55,6 +57,7 @@ import { unsavedScreen } from './router';
 import { shouldRunOnOpen } from './run-on-open';
 import { anySourceOn, huntSources } from './sources';
 import { TabSync } from './tab-sync';
+import { newPassphrase, openKeys, sealedProviders, sealKeys, unlock, WrongPassphraseError, type Unlocked } from '@/core/key-crypto';
 import { usd } from './format';
 import { strings } from './strings';
 
@@ -112,6 +115,16 @@ interface Actions {
   /** Deletes a key from storage at once (AC-10.1). Rejects if storage fails. */
   removeKey: (provider: ProviderId) => Promise<void>;
   deleteEverything: () => Promise<void>;
+  /** Opens the encrypted keys for this tab. False when the passphrase isn't right. */
+  unlockKeys: (passphrase: string) => Promise<boolean>;
+  /** Encrypts the stored keys with a new passphrase, or changes it while unlocked. */
+  setPassphrase: (passphrase: string) => Promise<void>;
+  /** Stores the keys plain again. Only while unlocked. */
+  removePassphrase: () => Promise<void>;
+  /** Forgets the keys in this tab until the passphrase is entered again. */
+  lockKeys: () => void;
+  /** A forgotten passphrase: deletes every stored key. Nothing can be recovered. */
+  forgetKeys: () => Promise<void>;
   /** Hides the note that another tab changed the data. */
   dismissChangedElsewhere: () => void;
 }
@@ -141,9 +154,15 @@ export interface AppState {
   savingOff: boolean;
   /**
    * Set when another tab's data was read in and something here gave way to it:
-   * `dropped`, a save here was refused; `draft-kept`, unsaved form changes here were kept.
+   * `dropped`, a save here was refused; `draft-kept`, unsaved form changes here were kept;
+   * `keys-locked`, another tab changed the key passphrase, so the keys here were locked.
    */
-  changedElsewhere: false | 'dropped' | 'draft-kept';
+  changedElsewhere: false | 'dropped' | 'draft-kept' | 'keys-locked';
+  /**
+   * The key passphrase (FR-10.4): `none`, keys are stored plain; `locked`, they're
+   * encrypted and this tab hasn't been given the passphrase; `unlocked`, it has.
+   */
+  keyLock: KeyLock;
   /** Counts the times another tab's saved data was read in. Screens use it as a key, so their forms start over. */
   reloads: number;
   /**
@@ -154,6 +173,8 @@ export interface AppState {
   hunt: HuntState;
   actions: Actions;
 }
+
+export type KeyLock = 'none' | 'locked' | 'unlocked';
 
 function providersWithKeys(keys: StoredKeys): ProviderId[] {
   return PROVIDER_IDS.filter((id) => Boolean(keys[id]));
@@ -234,6 +255,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [keyProviders, setKeyProviders] = useState<ProviderId[]>([]);
   // The keys themselves. Never put in React state or context (see AppState.keyProviders).
   const keys = useRef<StoredKeys>({});
+  // The AES key derived from the passphrase, while this tab is unlocked. Memory only, never
+  // stored or sent to other tabs, so each tab asks once and a reload asks again (FR-10.4).
+  const unlocked = useRef<Unlocked | null>(null);
+  const [keyLock, setKeyLock] = useState<KeyLock>('none');
+  const keyLockRef = useRef<KeyLock>('none');
+  keyLockRef.current = keyLock;
   const [hunt, setHunt] = useState<HuntState>(IDLE_HUNT);
 
   const today = localDate(now);
@@ -268,13 +295,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
   const tabSync = sync.current;
 
+  /**
+   * Takes in the keys record as stored. Sealed keys open only with the key this tab already
+   * holds for that same record. When another tab set, changed or removed the passphrase,
+   * that key no longer fits, so the keys here lock, and the app says so.
+   */
+  const takeKeys = useCallback(async (record: KeyRecord) => {
+    if (record.kind === 'plain') {
+      unlocked.current = null;
+      keys.current = record.keys;
+      setKeyProviders(providersWithKeys(record.keys));
+      setKeyLock('none');
+      return;
+    }
+    setKeyProviders(sealedProviders(record.sealed));
+    const held = unlocked.current;
+    if (held) {
+      try {
+        keys.current = await openKeys(record.sealed, held);
+        setKeyLock('unlocked');
+        return;
+      } catch {
+        setChangedElsewhere((current) => current || 'keys-locked');
+      }
+    }
+    unlocked.current = null;
+    keys.current = {};
+    setKeyLock('locked');
+  }, []);
+
   /** Reads the saved data and keys again, after another tab changed them. */
   const readAgain = useCallback(async () => {
     await tabSync.reload();
-    const stored = await loadKeys();
-    keys.current = stored;
-    setKeyProviders(providersWithKeys(stored));
-  }, [tabSync]);
+    await takeKeys(await loadKeyRecord());
+  }, [tabSync, takeKeys]);
 
   /** Writes the data, and tells the other tabs. A copy another tab made stale is never written. */
   const write = useCallback(
@@ -300,11 +354,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setData(first);
         }
         // Keys are read only once the data opened, so a broken store shows one error, not two.
-        return loadKeys().then((stored) => {
-          if (!active) return;
-          keys.current = stored;
-          setKeyProviders(providersWithKeys(stored));
-        });
+        return loadKeyRecord().then((record) => (active ? takeKeys(record) : undefined));
       })
       .catch(
         (error: unknown) =>
@@ -555,17 +605,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Turning the setting on later doesn't start a hunt until the next open.
   const openChecked = useRef(false);
   useEffect(() => {
-    if (!ready || openChecked.current) return;
+    // Locked keys: wait. Run on open checks again once this tab is unlocked (FR-10.4).
+    if (!ready || openChecked.current || keyLock === 'locked') return;
     openChecked.current = true;
     if (loadFailed || savingOff) return;
     const go = () => {
-      if (shouldRunOnOpen(latest.current, keyProviders, localDate(new Date()))) startHunt(true);
+      // Only keys this tab can use count: none while locked.
+      if (shouldRunOnOpen(latest.current, providersWithKeys(keys.current), localDate(new Date()))) startHunt(true);
     };
     // A page the browser loads ahead of a visit (prerendering) waits until it's really opened.
     const page = document as Document & { prerendering?: boolean };
     if (page.prerendering) document.addEventListener('prerenderingchange', go, { once: true });
     else go();
-  }, [ready, loadFailed, savingOff, keyProviders, startHunt]);
+  }, [ready, loadFailed, savingOff, keyLock, keyProviders, startHunt]);
 
   // Closing the tab during a real hunt asks first (FRD §10.2). A sample hunt loses nothing.
   useEffect(() => {
@@ -581,6 +633,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const moment = new Date();
         return replaceLead(current, key, (lead) => change(lead, moment));
       });
+
+    /** Stores the keys: sealed with the passphrase when one is set, else plain. Never while locked. */
+    const storeKeys = async (next: StoredKeys) => {
+      if (keyLockRef.current === 'locked') throw new Error('Unlock the keys first');
+      if (savingOffRef.current) return;
+      const held = unlocked.current;
+      const record = held ? await sealKeys(next, held) : null;
+      await tabSync.run(() => (record ? saveSealedKeys(record) : saveKeys(next)));
+      channel.current?.postMessage('saved');
+    };
 
     return {
       finishWelcome: () =>
@@ -693,10 +755,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       saveKey: async (provider, key) => {
         const next = { ...keys.current, [provider]: key.trim() };
-        if (!savingOffRef.current) {
-          await tabSync.run(() => saveKeys(next));
-          channel.current?.postMessage('saved');
-        }
+        await storeKeys(next);
         keys.current = next;
         setKeyProviders(providersWithKeys(next));
         setData((current) => ({ ...current, settings: { ...current.settings, provider } }));
@@ -705,10 +764,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       removeKey: async (provider) => {
         const next = { ...keys.current };
         delete next[provider];
-        if (!savingOffRef.current) {
-          await tabSync.run(() => saveKeys(next));
-          channel.current?.postMessage('saved');
-        }
+        await storeKeys(next);
         keys.current = next;
         const left = providersWithKeys(next);
         setKeyProviders(left);
@@ -721,6 +777,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
 
       dismissChangedElsewhere: () => setChangedElsewhere(false),
+
+      unlockKeys: async (passphrase) => {
+        const record = await loadKeyRecord();
+        if (record.kind === 'plain') {
+          await takeKeys(record);
+          return true;
+        }
+        try {
+          const held = await unlock(record.sealed, passphrase);
+          keys.current = await openKeys(record.sealed, held);
+          unlocked.current = held;
+        } catch (error) {
+          if (error instanceof WrongPassphraseError) return false;
+          throw error;
+        }
+        setKeyProviders(sealedProviders(record.sealed));
+        setKeyLock('unlocked');
+        return true;
+      },
+
+      setPassphrase: async (passphrase) => {
+        if (keyLockRef.current === 'locked') throw new Error('Unlock the keys first');
+        const held = await newPassphrase(passphrase);
+        const sealed = await sealKeys(keys.current, held);
+        if (!savingOffRef.current) {
+          await tabSync.run(() => saveSealedKeys(sealed));
+          channel.current?.postMessage('saved');
+        }
+        unlocked.current = held;
+        setKeyLock('unlocked');
+      },
+
+      removePassphrase: async () => {
+        if (keyLockRef.current !== 'unlocked') throw new Error('Unlock the keys first');
+        const plain = keys.current;
+        if (!savingOffRef.current) {
+          await tabSync.run(() => saveKeys(plain));
+          channel.current?.postMessage('saved');
+        }
+        unlocked.current = null;
+        setKeyLock('none');
+      },
+
+      lockKeys: () => {
+        if (keyLockRef.current !== 'unlocked') return;
+        unlocked.current = null;
+        keys.current = {};
+        setKeyLock('locked');
+      },
+
+      forgetKeys: async () => {
+        if (!savingOffRef.current) {
+          await tabSync.run(() => saveKeys({}));
+          channel.current?.postMessage('saved');
+        }
+        unlocked.current = null;
+        keys.current = {};
+        setKeyProviders([]);
+        setKeyLock('none');
+        setData((current) => ({ ...current, settings: { ...current.settings, provider: null } }));
+      },
 
       deleteEverything: async () => {
         huntControl.current?.abort();
@@ -736,17 +853,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // With saving off, the welcome screens stay skipped: their last step says data is saved.
         if (savingOffRef.current) fresh.settings.welcomeDone = true;
         keys.current = {};
+        unlocked.current = null;
+        setKeyLock('none');
         setKeyProviders([]);
         loaded.current = fresh;
         setHunt(IDLE_HUNT);
         setData(fresh);
       },
     };
-  }, [startHunt, tabSync]);
+  }, [startHunt, tabSync, takeKeys]);
 
   const state = useMemo<AppState>(
-    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, reloads, keyProviders, hunt, actions }),
-    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, reloads, keyProviders, hunt, actions],
+    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, keyProviders, hunt, actions }),
+    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, keyProviders, hunt, actions],
   );
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;

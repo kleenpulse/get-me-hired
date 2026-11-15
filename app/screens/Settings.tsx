@@ -106,7 +106,7 @@ function ProviderRow({
 }
 
 function KeyCard({ id }: { id: ProviderId }) {
-  const { keyProviders, savingOff, actions } = useApp();
+  const { keyProviders, keyLock, savingOff, actions } = useApp();
   const info = PROVIDERS[id];
   const k = t.key;
   const inputId = useId();
@@ -223,6 +223,10 @@ function KeyCard({ id }: { id: ProviderId }) {
         </a>
       </p>
 
+      {/* Locked keys can't be tested, added or removed until this tab is unlocked (FR-10.4). */}
+      {keyLock === 'locked' ? (
+        <p className="max-w-[68ch] rounded-note bg-lift p-3 type-body">{t.passphrase.lockedKeyCard}</p>
+      ) : (
       <form
         className="flex flex-col gap-2"
         onSubmit={(event) => {
@@ -273,6 +277,7 @@ function KeyCard({ id }: { id: ProviderId }) {
           {k.testNote(info.name)}
         </p>
       </form>
+      )}
 
       <div role="status" aria-live="polite">
         {message && (
@@ -286,6 +291,188 @@ function KeyCard({ id }: { id: ProviderId }) {
         <p className="max-w-[68ch] type-body">{k.privacy(info.name)}</p>
         <p className="max-w-[68ch] text-ink-2 type-caption">{k.shared}</p>
       </div>
+    </Card>
+  );
+}
+
+/** A hidden name, so a password manager knows what the passphrase is for (and the form is complete). */
+function AccountName() {
+  return <input type="text" name="username" autoComplete="username" value={t.passphrase.account} readOnly hidden />;
+}
+
+/** Passphrases shorter than this are refused: a short one is quick to guess. */
+const MIN_PASSPHRASE = 8;
+
+function PassphraseField({
+  label,
+  value,
+  onChange,
+  error,
+  autoComplete,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error: string | null;
+  autoComplete: 'new-password' | 'current-password';
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="type-label">
+        {label}
+      </label>
+      <input
+        id={id}
+        type="password"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        autoComplete={autoComplete}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        className={INPUT}
+      />
+      {error && (
+        <p id={`${id}-error`} className="text-critical type-caption">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * FR-10.4: the optional passphrase that encrypts stored keys (core/key-crypto.ts).
+ * It's asked once in each tab, and kept only in that tab's memory.
+ */
+function PassphraseCard() {
+  const { keyLock, savingOff, actions } = useApp();
+  const p = t.passphrase;
+  const [first, setFirst] = useState('');
+  const [second, setSecond] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: 'info' | 'failure'; text: string } | null>(null);
+
+  const tooShort = first.length > 0 && first.length < MIN_PASSPHRASE ? p.tooShort(MIN_PASSPHRASE) : null;
+  const different = second.length > 0 && first !== second ? p.different : null;
+  const pairOk = first.length >= MIN_PASSPHRASE && first === second;
+
+  const run = async (work: () => Promise<string | null>) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const text = await work();
+      if (text) setMessage({ tone: 'info', text });
+      setFirst('');
+      setSecond('');
+    } catch {
+      setMessage({ tone: 'failure', text: p.failed });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card aria-labelledby="passphrase-title" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1 border-b border-hairline pb-4">
+        <h2 id="passphrase-title" className="type-title">
+          {p.title}
+        </h2>
+        <p className="max-w-[68ch] text-ink-2 type-caption">{p.caption}</p>
+      </div>
+      <p className="max-w-[68ch] type-body">{keyLock === 'none' ? p.none : keyLock === 'locked' ? p.locked : p.unlockedNote}</p>
+
+      {savingOff ? (
+        <p className="max-w-[68ch] text-ink-2 type-caption">{p.savingOff}</p>
+      ) : keyLock === 'locked' ? (
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setBusy(true);
+            setMessage(null);
+            actions.unlockKeys(first).then(
+              (ok) => {
+                setBusy(false);
+                if (ok) setFirst('');
+                else setMessage({ tone: 'failure', text: p.wrong });
+              },
+              () => {
+                setBusy(false);
+                setMessage({ tone: 'failure', text: p.failed });
+              },
+            );
+          }}
+        >
+          <AccountName />
+          <PassphraseField label={p.label} value={first} onChange={setFirst} error={null} autoComplete="current-password" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" variant="primary" disabled={busy || !first}>
+              {busy ? p.unlocking : p.unlock}
+            </Button>
+            <Button
+              variant="quiet"
+              onClick={() => {
+                if (window.confirm(p.forgotConfirm)) void run(async () => (await actions.forgetKeys(), p.forgotten));
+              }}
+            >
+              {p.forgot}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!pairOk) return;
+            const changing = keyLock === 'unlocked';
+            void run(async () => (await actions.setPassphrase(first), changing ? p.changed : p.saved));
+          }}
+        >
+          <AccountName />
+          <PassphraseField
+            label={keyLock === 'unlocked' ? p.newLabel : p.label}
+            value={first}
+            onChange={setFirst}
+            error={tooShort}
+            autoComplete="new-password"
+          />
+          <PassphraseField label={p.confirm} value={second} onChange={setSecond} error={different} autoComplete="new-password" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" variant="primary" disabled={busy || !pairOk}>
+              {keyLock === 'unlocked' ? p.change : p.set}
+            </Button>
+            {keyLock === 'unlocked' && (
+              <>
+                <Button onClick={() => actions.lockKeys()}>{p.lockNow}</Button>
+                <Button
+                  variant="quiet"
+                  onClick={() => {
+                    if (window.confirm(p.removeConfirm)) void run(async () => (await actions.removePassphrase(), p.removed));
+                  }}
+                >
+                  {p.remove}
+                </Button>
+              </>
+            )}
+          </div>
+        </form>
+      )}
+
+      <div role="status" aria-live="polite">
+        {message && (
+          <Banner tone={message.tone} icon={message.tone === 'info' ? Check : TriangleAlert}>
+            {message.text}
+          </Banner>
+        )}
+      </div>
+
+      <ul className="flex list-disc flex-col gap-1 pl-5">
+        <li className="max-w-[68ch] text-ink-2 type-caption">{p.what}</li>
+        <li className="max-w-[68ch] text-ink-2 type-caption">{p.perTab}</li>
+        <li className="max-w-[68ch] text-ink-2 type-caption">{p.noRecovery}</li>
+      </ul>
     </Card>
   );
 }
@@ -333,7 +520,10 @@ export function Settings() {
         </Card>
 
         {/* A new card for each provider, so nothing typed for one carries over to another. */}
-        <KeyCard key={selected} id={selected} />
+        <div className="flex flex-col gap-gutter">
+          <KeyCard key={selected} id={selected} />
+          <PassphraseCard />
+        </div>
       </div>
 
       <div className="grid gap-gutter md:grid-cols-2 md:items-start">
