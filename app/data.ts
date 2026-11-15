@@ -31,6 +31,13 @@ export interface RunRecord {
   dropped: DroppedLead[];
   /** True for a sample hunt, which searched nothing. */
   sample: boolean;
+  /** The provider the hunt used. Only its name, never its key. */
+  provider?: ProviderId | null;
+  /** Why a stopped hunt stopped. */
+  problem?: HuntResult['problem'];
+  /** The run report (FR-8.1) as Markdown, and its file name in `runs/`. Hunts from before reports have none. */
+  report?: string;
+  reportName?: string;
 }
 
 export interface AppData {

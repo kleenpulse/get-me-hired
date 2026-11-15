@@ -12,6 +12,7 @@
 import { waitingSteps, type DroppedLead, type HuntResult, type HuntRunner, type HuntStep, type HuntStepId } from './hunt';
 import type { Lead } from './lead';
 import type { Profile } from './profile';
+import { addUsage, NO_USAGE, type Usage } from './prices';
 import { classifyProviderError, loadModel, loadSdk, type KeyProblem, type ProviderId } from './providers';
 
 export interface RealHuntSettings {
@@ -42,6 +43,8 @@ export interface StageContext {
   addUnread: (count: number) => void;
   /** A source that couldn't be searched today, by host name (FR-4.11). */
   addFailedSource: (host: string) => void;
+  /** Adds one answered model call's token counts (FR-4.13). */
+  addUsage: (usage: { inputTokens?: number | undefined; outputTokens?: number | undefined }) => void;
 }
 
 /** How a stage ended. A key or account problem stops the whole hunt. */
@@ -62,6 +65,7 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
     const dropped: DroppedLead[] = [];
     const failedSources: string[] = [];
     let unread = 0;
+    let usage: Usage = NO_USAGE;
 
     const report = () => onProgress({ steps: steps.map((step) => ({ ...step })), kept: leads.length, dropped: dropped.length });
     const set = (id: HuntStepId, change: Partial<HuntStep>) => {
@@ -76,6 +80,7 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
       ...(problem ? { problem } : {}),
       ...(unread > 0 ? { unread } : {}),
       ...(failedSources.length > 0 ? { failedSources } : {}),
+      usage,
     });
 
     // Fresh posts and their age check need web search, which no free key has (FRD §19).
@@ -118,6 +123,9 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
       },
       addUnread: (count) => {
         unread += count;
+      },
+      addUsage: (more) => {
+        usage = addUsage(usage, more);
       },
       addFailedSource: (host) => {
         if (!failedSources.includes(host)) failedSources.push(host);

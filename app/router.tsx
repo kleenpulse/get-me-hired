@@ -3,11 +3,12 @@
 
 import { useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from 'react';
 
-export type Route = 'today' | 'board' | 'profile' | 'data' | 'settings';
+export type Route = 'today' | 'board' | 'history' | 'profile' | 'data' | 'settings';
 
 export const PATHS: Record<Route, string> = {
   today: '/',
   board: '/board',
+  history: '/history',
   profile: '/profile',
   settings: '/settings',
   data: '/data',

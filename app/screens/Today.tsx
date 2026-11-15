@@ -251,8 +251,19 @@ export function Today() {
           {hunt.running ? '' : (hunt.message ?? '')}
         </p>
         {!hunt.running && hunt.message && (
-          <div aria-hidden>
-            <Banner tone={hunt.failed ? 'failure' : 'info'} icon={hunt.failed ? TriangleAlert : Check}>
+          <div>
+            <Banner
+              tone={hunt.failed ? 'failure' : 'info'}
+              icon={hunt.failed ? TriangleAlert : Check}
+              action={
+                <Link
+                  to="history"
+                  className="inline-flex min-h-11 items-center rounded-pill bg-glass px-4 no-underline type-label hover:brightness-95"
+                >
+                  {strings.hunt.seeReport}
+                </Link>
+              }
+            >
               {hunt.message}
             </Banner>
           </div>
