@@ -170,7 +170,7 @@ function capNote(cap: CapState): string {
 }
 
 export function Today() {
-  const { data, today, now, hunt, keyProviders, actions } = useApp();
+  const { data, today, now, hunt, keyProviders, keyLock, actions } = useApp();
   const [filter, setFilter] = useState<Filter>('all');
   const { sampleMode, dailyTarget, cadence } = data.settings;
 
@@ -197,9 +197,11 @@ export function Today() {
   // A real hunt needs a complete profile and a saved key (FR-3.6). A sample hunt needs neither.
   // Every source off: a real hunt would search nothing (FR-10.3).
   const sourcesOff = !sampleMode && !anySourceOn(data.settings);
-  const canHunt = sampleMode || (missing.length === 0 && hasKey && !sourcesOff);
+  // Encrypted keys this tab hasn't unlocked: saved, but not usable here (FR-10.4).
+  const keysLocked = !sampleMode && keyLock === 'locked';
+  const canHunt = sampleMode || (missing.length === 0 && hasKey && !sourcesOff && !keysLocked);
   // The estimate before every real hunt, and the monthly cap (FR-4.13, AC-4.13).
-  const cap = !sampleMode && provider && hasKey && missing.length === 0 && !sourcesOff ? capState(data, provider, today) : null;
+  const cap = !sampleMode && provider && hasKey && missing.length === 0 && !sourcesOff && !keysLocked ? capState(data, provider, today) : null;
   const capOk = cap === null || capAllowsStart(cap);
 
   const empty =
@@ -269,7 +271,9 @@ export function Today() {
                 ? t.huntNeedsProfile(missing)
                 : !hasKey
                   ? t.huntNeedsKey
-                  : sourcesOff
+                  : keysLocked
+                    ? t.keysLocked
+                    : sourcesOff
                     ? t.sourcesOff
                     : t.huntReady}
           </p>

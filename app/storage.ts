@@ -1,6 +1,7 @@
 // Browser storage (FR-9.1). Everything is one record in IndexedDB, written in
 // one transaction, so a closed tab can never leave half a save behind (NFR-7).
 
+import { isSealedKeys, type SealedKeys } from '@/core/key-crypto';
 import { isProviderId, type ProviderId } from '@/core/providers';
 import { FORMAT_VERSION, withDefaults, type AppData } from './data';
 
@@ -144,6 +145,19 @@ export async function loadKeys(): Promise<StoredKeys> {
 
 export async function saveKeys(keys: StoredKeys): Promise<void> {
   await transact('readwrite', (store) => store.put(keys, KEYS_RECORD));
+}
+
+/** The keys record as stored: plain, or sealed with the key passphrase (FR-10.4). */
+export type KeyRecord = { kind: 'plain'; keys: StoredKeys } | { kind: 'sealed'; sealed: SealedKeys };
+
+export async function loadKeyRecord(): Promise<KeyRecord> {
+  const saved = await transact<unknown>('readonly', (store) => store.get(KEYS_RECORD));
+  return isSealedKeys(saved) ? { kind: 'sealed', sealed: saved } : { kind: 'plain', keys: await loadKeys() };
+}
+
+/** Stores the keys sealed. The passphrase and the AES key are never stored. */
+export async function saveSealedKeys(sealed: SealedKeys): Promise<void> {
+  await transact('readwrite', (store) => store.put(sealed, KEYS_RECORD));
 }
 
 /** Whether the browser promised to keep this site's data when space runs low. */

@@ -3,7 +3,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyData, type AppData } from './data';
-import { loadData, loadKeys, NewerDataError, revisionOf, saveData, StaleDataError, StorageBlockedError } from './storage';
+import { newPassphrase, sealKeys } from '@/core/key-crypto';
+import { loadData, loadKeyRecord, loadKeys, NewerDataError, revisionOf, saveData, StaleDataError, StorageBlockedError } from './storage';
 
 /** A stand-in for `indexedDB.open` that fails the way a blocking browser does. */
 function failingOpen(error: DOMException): Pick<IDBFactory, 'open'> {
@@ -193,5 +194,24 @@ describe('saving over another tab (NFR-7)', () => {
     expect(revisionOf({ revision: 'five' })).toBe(0);
     expect(revisionOf(null)).toBe(0);
     expect(revisionOf({ revision: 9 })).toBe(9);
+  });
+});
+
+describe('the keys record (FR-10.4)', () => {
+  it('reads plain keys as plain, and sealed keys as sealed without opening them', async () => {
+    vi.stubGlobal('indexedDB', openWith({ gemini: 'test-key-not-real-0000' }));
+    expect(await loadKeyRecord()).toEqual({ kind: 'plain', keys: { gemini: 'test-key-not-real-0000' } });
+
+    const sealed = await sealKeys({ gemini: 'test-key-not-real-0000' }, await newPassphrase('correct horse', 1_000));
+    vi.stubGlobal('indexedDB', openWith(sealed));
+    const record = await loadKeyRecord();
+    expect(record.kind).toBe('sealed');
+    expect(JSON.stringify(record)).not.toContain('test-key-not-real');
+  });
+
+  it('never reads a sealed record as plain keys', async () => {
+    const sealed = await sealKeys({ gemini: 'test-key-not-real-0000' }, await newPassphrase('correct horse', 1_000));
+    vi.stubGlobal('indexedDB', openWith(sealed));
+    expect(await loadKeys()).toEqual({});
   });
 });
