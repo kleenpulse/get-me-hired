@@ -4,6 +4,7 @@ import type { DroppedLead, HuntResult } from '@/core/hunt';
 import type { Lead } from '@/core/lead';
 import { DEFAULT_CADENCE, type Cadence } from '@/core/lifecycle';
 import { emptyProfile, type Profile } from '@/core/profile';
+import type { ProviderId } from '@/core/providers';
 
 export const FORMAT_VERSION = 1;
 export const DEFAULT_DAILY_TARGET = 20;
@@ -16,6 +17,8 @@ export interface Settings {
   /** How many people to write to in a day (FR-4.14). */
   dailyTarget: number;
   cadence: Cadence;
+  /** The provider hunts use. Only its name: the key itself is stored apart (see storage.ts). */
+  provider: ProviderId | null;
 }
 
 export interface RunRecord {
@@ -49,6 +52,7 @@ export function emptyData(): AppData {
       sampleMode: false,
       dailyTarget: DEFAULT_DAILY_TARGET,
       cadence: DEFAULT_CADENCE,
+      provider: null,
     },
     runs: [],
   };

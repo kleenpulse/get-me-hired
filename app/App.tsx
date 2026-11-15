@@ -7,6 +7,7 @@ import { useRoute, type Route } from './router';
 import { Board } from './screens/Board';
 import { Data } from './screens/Data';
 import { Profile } from './screens/Profile';
+import { Settings } from './screens/Settings';
 import { Today } from './screens/Today';
 import { Welcome } from './screens/Welcome';
 import { useApp } from './state';
@@ -17,6 +18,7 @@ const TITLES: Record<Route, string> = {
   board: strings.nav.board,
   profile: strings.nav.profile,
   data: strings.nav.data,
+  settings: strings.nav.settings,
 };
 
 /**
@@ -93,6 +95,7 @@ export function App() {
           {route === 'board' && <Board />}
           {route === 'profile' && <Profile />}
           {route === 'data' && <Data />}
+          {route === 'settings' && <Settings />}
         </Shell>
       )}
     </MotionConfig>

@@ -15,6 +15,7 @@ import { localDate } from '@/core/dates';
 import type { HuntProgress, HuntResult } from '@/core/hunt';
 import type { Lead, LeadStatus } from '@/core/lead';
 import { cleanProfile, type Profile } from '@/core/profile';
+import { PROVIDER_IDS, type ProviderId } from '@/core/providers';
 import {
   applyAutomaticMoves,
   markEmailed,
@@ -28,12 +29,15 @@ import { emptyData, type AppData, type RunRecord } from './data';
 import {
   clearData,
   loadData,
+  loadKeys,
   NewerDataError,
   StorageBlockedError,
   readPersistence,
   requestPersistence,
   saveData,
+  saveKeys,
   type Persistence,
+  type StoredKeys,
 } from './storage';
 import { strings } from './strings';
 
@@ -59,6 +63,10 @@ interface Actions {
   saveProfile: (profile: Profile) => void;
   /** Runs the app in memory only, after the browser refused to store data. */
   continueWithoutSaving: () => void;
+  /** Stores a key that passed its test and makes its provider the one hunts use. Rejects if storage fails. */
+  saveKey: (provider: ProviderId, key: string) => Promise<void>;
+  /** Deletes a key from storage at once (AC-10.1). Rejects if storage fails. */
+  removeKey: (provider: ProviderId) => Promise<void>;
   deleteEverything: () => Promise<void>;
 }
 
@@ -76,8 +84,17 @@ export interface AppState {
   loadFailed: false | 'broken' | 'newer' | 'blocked';
   /** True when the user chose to go on in a browser that won't store data. Nothing is saved. */
   savingOff: boolean;
+  /**
+   * The providers that have a key saved. The keys themselves stay inside the
+   * provider component, so no screen can show or log one by accident.
+   */
+  keyProviders: ProviderId[];
   hunt: HuntState;
   actions: Actions;
+}
+
+function providersWithKeys(keys: StoredKeys): ProviderId[] {
+  return PROVIDER_IDS.filter((id) => Boolean(keys[id]));
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -142,6 +159,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [savingOff, setSavingOff] = useState(false);
   // The same flag for the actions, which are made once and don't see new renders.
   const savingOffRef = useRef(false);
+  const [keyProviders, setKeyProviders] = useState<ProviderId[]>([]);
+  // The keys themselves. Never put in React state or context (see AppState.keyProviders).
+  const keys = useRef<StoredKeys>({});
   const [hunt, setHunt] = useState<HuntState>(IDLE_HUNT);
 
   const today = localDate(now);
@@ -162,6 +182,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           loaded.current = saved;
           setData(saved);
         }
+        // Keys are read only once the data opened, so a broken store shows one error, not two.
+        return loadKeys().then((stored) => {
+          if (!active) return;
+          keys.current = stored;
+          setKeyProviders(providersWithKeys(stored));
+        });
       })
       .catch(
         (error: unknown) =>
@@ -313,6 +339,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setData((current) => ({ ...current, settings: { ...current.settings, welcomeDone: true } }));
       },
 
+      saveKey: async (provider, key) => {
+        const next = { ...keys.current, [provider]: key.trim() };
+        if (!savingOffRef.current) await saveKeys(next);
+        keys.current = next;
+        setKeyProviders(providersWithKeys(next));
+        setData((current) => ({ ...current, settings: { ...current.settings, provider } }));
+      },
+
+      removeKey: async (provider) => {
+        const next = { ...keys.current };
+        delete next[provider];
+        if (!savingOffRef.current) await saveKeys(next);
+        keys.current = next;
+        const left = providersWithKeys(next);
+        setKeyProviders(left);
+        // Hunts move to another provider that still has a key, if there is one.
+        setData((current) =>
+          current.settings.provider === provider
+            ? { ...current, settings: { ...current.settings, provider: left[0] ?? null } }
+            : current,
+        );
+      },
+
       deleteEverything: async () => {
         huntControl.current?.abort();
         // With saving off there is nothing stored, and storage would refuse the request anyway.
@@ -320,6 +369,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const fresh = emptyData();
         // With saving off, the welcome screens stay skipped: their last step says data is saved.
         if (savingOffRef.current) fresh.settings.welcomeDone = true;
+        keys.current = {};
+        setKeyProviders([]);
         loaded.current = fresh;
         setHunt(IDLE_HUNT);
         setData(fresh);
@@ -328,8 +379,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [runHunt]);
 
   const state = useMemo<AppState>(
-    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, hunt, actions }),
-    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, hunt, actions],
+    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, keyProviders, hunt, actions }),
+    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, keyProviders, hunt, actions],
   );
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;

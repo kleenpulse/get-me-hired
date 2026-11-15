@@ -5,6 +5,7 @@
 import type { DropReason, HuntStepId } from '@/core/hunt';
 import type { Attention, ContactLabel, LeadStatus, Signal, Tier } from '@/core/lead';
 import type { RemotePreference, RequiredField } from '@/core/profile';
+import type { KeyProblem, ProviderId } from '@/core/providers';
 import type { NewGroup, TodayGroup } from '@/core/ranking';
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
@@ -35,6 +36,78 @@ export const strings = {
     board: 'Board',
     profile: 'Profile',
     data: 'Data',
+    settings: 'Settings',
+  },
+
+  settings: {
+    title: 'Settings',
+    provider: {
+      title: 'AI provider',
+      caption: 'The service that searches and reads web pages for your hunts. You connect it with your own key.',
+      using: (name: string) => `Hunts use ${name}.`,
+      none: 'No provider is connected yet.',
+      listLabel: 'Choose a provider',
+      about: {
+        gemini: 'Recommended. Has a free tier.',
+        openrouter: 'Many models, some of them free.',
+        anthropic: 'Coming later',
+        openai: 'Coming later',
+      } satisfies Record<ProviderId, string>,
+      keySaved: 'Key saved',
+      inUse: 'In use',
+      notOffered: (names: readonly string[]) =>
+        `${listWords(names)} ${names.length === 1 ? 'is' : 'are'} not offered yet. We have not confirmed that ${names.length === 1 ? 'it works' : 'they work'} from a browser with a real key.`,
+    },
+    key: {
+      title: (name: string) => `Your ${name} key`,
+      steps: {
+        gemini: [
+          'Open Google AI Studio and sign in with your Google account.',
+          'Press "Create API key", then copy the key.',
+          'Paste it below and press Test key.',
+        ],
+        openrouter: [
+          'Open OpenRouter and sign in.',
+          'Create a key, then copy it.',
+          'Paste it below and press Test key.',
+        ],
+        anthropic: [],
+        openai: [],
+      } satisfies Record<ProviderId, readonly string[]>,
+      openKeyPage: (name: string) => `Get a key from ${name}`,
+      opensNewTab: '(opens in a new tab)',
+      label: 'Key',
+      replaceLabel: 'New key',
+      show: 'Show key',
+      hide: 'Hide key',
+      paste: 'Paste',
+      pasteFailed: 'This browser did not allow pasting. Paste into the box with your keyboard instead.',
+      test: 'Test key',
+      testing: 'Testing…',
+      testNote: (name: string) =>
+        `The test sends one tiny request to ${name}. On a free tier it costs nothing. The key is saved only if it works.`,
+      empty: 'Paste a key first.',
+      connected: (name: string) => `Connected. Your ${name} key works, and it is saved in this browser.`,
+      connectedForNow: (name: string) =>
+        `Connected. Your ${name} key works. Saving is off, so it is kept only until you close this tab.`,
+      problems: {
+        'wrong-key': (name: string) => `This key didn't work with ${name}. Check that you copied all of it.`,
+        'no-credit': (name: string) => `Your ${name} account is out of credit.`,
+        'rate-limited': (name: string) => `${name} asked us to slow down. Wait a minute, then try again.`,
+        'provider-down': (name: string) => `${name} isn't answering right now. Try again in a few minutes.`,
+        'missing-capability': (name: string) => `${name} can't do what a hunt needs with this key.`,
+        'no-connection': (name: string) => `We couldn't reach ${name}. Check your internet connection.`,
+        timeout: (name: string) => `${name} didn't answer within 10 seconds. Try again.`,
+        unknown: (name: string) => `The test with ${name} failed, and we couldn't tell why. Try again.`,
+      } satisfies Record<KeyProblem, (name: string) => string>,
+      saveFailed: 'The key works, but this browser would not save it. Try again.',
+      remove: 'Remove key',
+      removed: (name: string) => `Your ${name} key was removed from this browser.`,
+      removeFailed: 'The key could not be removed. Try again.',
+      privacy: (name: string) =>
+        `Your key stays in this browser. It is sent only to ${name}, never to us, and it is never put in a backup file.`,
+      shared: 'On a shared computer, anyone who uses this browser can use your key. Remove it when you are done.',
+    },
   },
 
   welcome: {
@@ -418,10 +491,10 @@ export const strings = {
     },
     deleteAll: {
       title: 'Delete everything',
-      body: 'This wipes your profile and every lead and setting from this browser. It cannot be undone.',
+      body: 'This wipes your profile, your keys, and every lead and setting from this browser. It cannot be undone.',
       open: 'Delete everything…',
       confirmTitle: 'Delete everything?',
-      confirmBody: 'Your profile and every lead and setting in this browser will be wiped. This cannot be undone.',
+      confirmBody: 'Your profile, your keys, and every lead and setting in this browser will be wiped. This cannot be undone.',
       typeLabel: 'Type DELETE to confirm',
       word: 'DELETE',
       confirm: 'Delete everything',
