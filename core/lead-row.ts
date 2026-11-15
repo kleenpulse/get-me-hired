@@ -100,6 +100,31 @@ function sourceKind(type: Lead['type'], url: string): LeadSource['kind'] {
   return /(^|\.)news\.ycombinator\.com$/i.test(URL.canParse(url) ? new URL(url).host : '') ? 'community' : 'post';
 }
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * True when `rowToLead` can't hold everything in the row, so writing the lead
+ * back would change or drop something the file had. A linked folder keeps such
+ * rows exactly as they are (FR-9.3). Each check matches a place in `rowToLead`
+ * that lets go of something; keep the two in step.
+ */
+export function rowLosesData(imported: ImportedLead): boolean {
+  const { row } = imported;
+  // Marked rows include every row with fields past the 17th ('field-count').
+  if (imported.needsReview.length > 0) return true;
+  if (row.source_url !== '' && !isWebUrl(row.source_url)) return true;
+  if (row.company_url !== '' && !isWebUrl(row.company_url)) return true;
+  if (row.posted_at !== '' && Number.isNaN(Date.parse(row.posted_at.replace(/^~/, '')))) return true;
+  if (row.likes !== '' && !/^\d+$/.test(row.likes) && row.likes !== 'n/a' && row.likes !== 'unknown') return true;
+  // Hooks are kept only with a source link to point at.
+  if (splitList(row.hooks).length > 0 && !isWebUrl(row.source_url)) return true;
+  if (row.status === 'not-now' && row.next_action_on !== '' && !DAY.test(row.next_action_on)) return true;
+  // Text is written on one line.
+  if ([row.company, row.round, row.role, row.fit, row.people, row.hooks].some((text) => /[\r\n]/.test(text))) return true;
+  const confidences = splitList(row.contact_confidence);
+  return splitList(row.contacts).some((text, index) => parseContact(text, confidences[index] ?? 'guess') === null);
+}
+
 /**
  * A lead from a row, for files with no `get-me-hired.json` beside them (the
  * skill writes only the CSV). Contacts are matched to people item for item

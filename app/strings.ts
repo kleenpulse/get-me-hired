@@ -903,7 +903,7 @@ export const strings = {
       title: 'Linked folder',
       body: 'If you use the Get Me Hired skill in a coding agent, link the folder it writes to, and the app reads your profile, leads and reports from it.',
       linked: (name: string) => `Linked to the folder “${name}”.`,
-      readOnly: 'Read from your folder. Changes here aren’t written back yet, and nothing in the folder is changed.',
+      note: 'The app reads your folder, and saves to it only when you click Save. Before the first save each day, it keeps a copy of your files in the folder’s .get-me-hired folder.',
       unsupported: 'Your browser can’t link a folder. Chrome and Edge can. Use backup and restore below instead.',
       link: 'Link a folder',
       read: 'Read from folder',
@@ -911,6 +911,30 @@ export const strings = {
       reconnect: 'Reconnect the folder',
       unlink: 'Unlink',
       unlinked: 'The folder is unlinked. Its files are as they were.',
+      save: 'Save to folder',
+      saving: 'Saving to the folder…',
+      writeDenied: 'The browser didn’t allow saving to this folder, so nothing was saved.',
+      nothingToSave: 'Your folder already has everything here. Nothing was changed.',
+      saved: (files: number, backupDay: string | null, kept: number, blocked: number, added: number) =>
+        [
+          `Saved ${plural(files, 'file', 'files')} to your folder.`,
+          backupDay ? `A copy of the files from before is in .get-me-hired/backups/${backupDay}.` : '',
+          kept > 0 ? `${plural(kept, 'row', 'rows')} the app can’t read in full ${kept === 1 ? 'was' : 'were'} left exactly as ${kept === 1 ? 'it was' : 'they were'}.` : '',
+          blocked > 0 ? `${plural(blocked, 'row', 'rows')} on your do-not-contact list ${blocked === 1 ? 'was' : 'were'} taken out.` : '',
+          added > 0 ? `${plural(added, 'lead', 'leads')} from the folder ${added === 1 ? 'was' : 'were'} added here.` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      writeProblems: {
+        'not-backup': 'A file in this folder isn’t in the skill’s format, so the app won’t write over it. Nothing was saved.',
+        newer: 'This folder was written by a newer version of Get Me Hired, so the app won’t write to it. Update the app first.',
+        damaged: 'A file in this folder couldn’t be read, so the app won’t write over it. Nothing was saved.',
+        'too-big': 'This folder holds too much for the app to check, so nothing was saved.',
+        'write-failed': 'Saving stopped partway. No file was left half-written, and the copy in .get-me-hired/backups is safe. Try again.',
+        // A folder isn't a ZIP, so these two can't happen. They read like "damaged" if they ever do.
+        'not-zip': 'A file in this folder couldn’t be read, so the app won’t write over it. Nothing was saved.',
+        unsupported: 'A file in this folder couldn’t be read, so the app won’t write over it. Nothing was saved.',
+      },
       failed: 'The folder couldn’t be linked. Try again.',
       confirmTitle: 'Bring in the files from your folder?',
       replaceProfile: 'Replace my profile with the one in the folder',
