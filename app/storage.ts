@@ -9,6 +9,7 @@ const DATABASE = 'get-me-hired';
 const STORE = 'app';
 const RECORD = 'data';
 const KEYS_RECORD = 'keys';
+const FOLDER_RECORD = 'folder';
 
 /**
  * The browser won't let the app store anything: there is no IndexedDB, or
@@ -141,6 +142,23 @@ export async function loadKeys(): Promise<StoredKeys> {
     if (isProviderId(id) && typeof value === 'string' && value) keys[id] = value;
   }
   return keys;
+}
+
+/**
+ * The linked folder's handle (FR-9.3), in its own record, never in AppData, so it is
+ * never in a backup. It's a permission, not data. Delete everything clears it too.
+ */
+export async function loadFolderHandle(): Promise<unknown> {
+  return transact<unknown>('readonly', (store) => store.get(FOLDER_RECORD));
+}
+
+export async function saveFolderHandle(handle: unknown): Promise<void> {
+  await transact('readwrite', (store) => store.put(handle, FOLDER_RECORD));
+}
+
+/** Unlink: drops the app's handle. The folder and its files are left as they are. */
+export async function clearFolderHandle(): Promise<void> {
+  await transact('readwrite', (store) => store.delete(FOLDER_RECORD));
 }
 
 export async function saveKeys(keys: StoredKeys): Promise<void> {
