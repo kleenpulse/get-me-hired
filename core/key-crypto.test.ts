@@ -3,6 +3,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  DamagedKeysError,
+  isDamagedSealedKeys,
   isSealedKeys,
   KDF,
   KDF_ITERATIONS,
@@ -33,11 +35,23 @@ describe('the key passphrase (FR-10.4)', () => {
     await expect(unlock(empty, 'wrong horse')).rejects.toBeInstanceOf(WrongPassphraseError);
   });
 
-  it("won't open a key moved to another provider", async () => {
+  it("won't open a key moved to another provider, and calls it damaged", async () => {
     const sealed = await sealKeys(KEYS, await newPassphrase('correct horse', FAST));
     const swapped = { ...sealed, entries: { gemini: sealed.entries.openrouter, openrouter: sealed.entries.gemini } };
     const unlocked = await unlock(swapped, 'correct horse');
-    await expect(openKeys(swapped, unlocked)).rejects.toBeInstanceOf(WrongPassphraseError);
+    await expect(openKeys(swapped, unlocked)).rejects.toBeInstanceOf(DamagedKeysError);
+  });
+
+  it('calls a corrupted entry damaged when the passphrase is right, and still wrong when it is not', async () => {
+    const sealed = await sealKeys({ gemini: KEYS.gemini }, await newPassphrase('correct horse', FAST));
+    // Flip one byte of the entry: still valid base64 of the same length.
+    const bytes = Uint8Array.from(atob(sealed.entries.gemini!.ct), (char) => char.charCodeAt(0));
+    bytes[0] = bytes[0]! ^ 0xff;
+    const flipped = { ...sealed, entries: { gemini: { iv: sealed.entries.gemini!.iv, ct: btoa(String.fromCharCode(...bytes)) } } };
+    expect(isSealedKeys(flipped)).toBe(true);
+    const unlocked = await unlock(flipped, 'correct horse');
+    await expect(openKeys(flipped, unlocked)).rejects.toBeInstanceOf(DamagedKeysError);
+    await expect(unlock(flipped, 'wrong horse')).rejects.toBeInstanceOf(WrongPassphraseError);
   });
 
   it('refuses a key derived for another record', async () => {
@@ -76,5 +90,23 @@ describe('the key passphrase (FR-10.4)', () => {
     expect(isSealedKeys({ ...sealed, kdf: 'MD5' })).toBe(false);
     expect(isSealedKeys({ ...sealed, entries: { nope: sealed.entries.gemini } })).toBe(false);
     expect(isSealedKeys(null)).toBe(false);
+  });
+
+  it('refuses bytes that are not base64 or the wrong length, and calls that record damaged', async () => {
+    const sealed = await sealKeys(KEYS, await newPassphrase('correct horse', FAST));
+    const damaged = [
+      { ...sealed, salt: '!!not base64!!' },
+      { ...sealed, salt: btoa('short') },
+      { ...sealed, check: { ...sealed.check, iv: btoa('eleven byte') } },
+      { ...sealed, entries: { gemini: { iv: sealed.entries.gemini!.iv, ct: btoa('tiny') } } },
+    ];
+    for (const record of damaged) {
+      expect(isSealedKeys(record)).toBe(false);
+      expect(isDamagedSealedKeys(record)).toBe(true);
+    }
+    // Plain keys and a good record are never called damaged.
+    expect(isDamagedSealedKeys(KEYS)).toBe(false);
+    expect(isDamagedSealedKeys(sealed)).toBe(false);
+    expect(isDamagedSealedKeys(undefined)).toBe(false);
   });
 });

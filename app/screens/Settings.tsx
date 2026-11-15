@@ -224,8 +224,10 @@ function KeyCard({ id }: { id: ProviderId }) {
       </p>
 
       {/* Locked keys can't be tested, added or removed until this tab is unlocked (FR-10.4). */}
-      {keyLock === 'locked' ? (
-        <p className="max-w-[68ch] rounded-note bg-lift p-3 type-body">{t.passphrase.lockedKeyCard}</p>
+      {keyLock === 'locked' || keyLock === 'damaged' ? (
+        <p className="max-w-[68ch] rounded-note bg-lift p-3 type-body">
+          {keyLock === 'damaged' ? t.passphrase.damagedKeyCard : t.passphrase.lockedKeyCard}
+        </p>
       ) : (
       <form
         className="flex flex-col gap-2"
@@ -380,10 +382,22 @@ function PassphraseCard() {
         </h2>
         <p className="max-w-[68ch] text-ink-2 type-caption">{p.caption}</p>
       </div>
-      <p className="max-w-[68ch] type-body">{keyLock === 'none' ? p.none : keyLock === 'locked' ? p.locked : p.unlockedNote}</p>
+      <p className="max-w-[68ch] type-body">
+        {keyLock === 'none' ? p.none : keyLock === 'locked' ? p.locked : keyLock === 'damaged' ? p.damaged : p.unlockedNote}
+      </p>
 
       {savingOff ? (
         <p className="max-w-[68ch] text-ink-2 type-caption">{p.savingOff}</p>
+      ) : keyLock === 'damaged' ? (
+        <div>
+          <Button
+            onClick={() => {
+              if (window.confirm(p.damagedConfirm)) void run(async () => (await actions.forgetKeys(), p.forgotten));
+            }}
+          >
+            {p.removeDamaged}
+          </Button>
+        </div>
       ) : keyLock === 'locked' ? (
         <form
           className="flex flex-col gap-3"
@@ -392,10 +406,10 @@ function PassphraseCard() {
             setBusy(true);
             setMessage(null);
             actions.unlockKeys(first).then(
-              (ok) => {
+              (outcome) => {
                 setBusy(false);
-                if (ok) setFirst('');
-                else setMessage({ tone: 'failure', text: p.wrong });
+                if (outcome === 'unlocked') setFirst('');
+                else setMessage({ tone: 'failure', text: outcome === 'wrong' ? p.wrong : p.damaged });
               },
               () => {
                 setBusy(false);
@@ -471,6 +485,7 @@ function PassphraseCard() {
       <ul className="flex list-disc flex-col gap-1 pl-5">
         <li className="max-w-[68ch] text-ink-2 type-caption">{p.what}</li>
         <li className="max-w-[68ch] text-ink-2 type-caption">{p.perTab}</li>
+        <li className="max-w-[68ch] text-ink-2 type-caption">{p.dontSave}</li>
         <li className="max-w-[68ch] text-ink-2 type-caption">{p.noRecovery}</li>
       </ul>
     </Card>
