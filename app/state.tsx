@@ -46,6 +46,7 @@ import {
 } from './storage';
 import type { Incoming, MergeSummary } from './backup';
 import { downloadBlob } from './download';
+import { deletePerson } from './erase';
 import { addFound, applyBlocks } from './found';
 import { strings } from './strings';
 
@@ -88,6 +89,12 @@ interface Actions {
    */
   block: (entries: BlockEntry[]) => number;
   unblock: (entry: BlockEntry) => void;
+  /**
+   * Deletes one person's name and contacts everywhere the app stores them, and
+   * keeps the company lead (FR-9.5). With `block`, they also go on the
+   * do-not-contact list. False when that person isn't at that place any more.
+   */
+  deletePerson: (key: string, personIndex: number, name: string, block: BlockEntry | null) => boolean;
   /** Downloads a backup ZIP of the real data, and notes the date (FR-9.2). */
   exportBackup: () => Promise<void>;
   /** Brings a read backup in, merged by lead key (FR-6.8). Resolves with what happened. */
@@ -463,6 +470,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       block: (entries) => {
         setData((current) => applyBlocks(current, entries).data);
         return applyBlocks(latest.current, entries).removed;
+      },
+
+      deletePerson: (key, personIndex, name, block) => {
+        const erase = (current: AppData): AppData | null => {
+          const erased = deletePerson(current, key, personIndex, name);
+          return erased && block ? applyBlocks(erased, [block]).data : erased;
+        };
+        const done = erase(latest.current) !== null;
+        setData((current) => erase(current) ?? current);
+        return done;
       },
 
       unblock: (entry) =>

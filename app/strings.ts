@@ -391,6 +391,23 @@ export const strings = {
     dontContactFor: (name: string) => `Don’t contact ${name}`,
     dontContactConfirm: (name: string, company: string) =>
       `Block ${name} at ${company}? They will be taken off this lead and left out of every hunt. You can unblock them under Data.`,
+    deletePerson: 'Delete',
+    deletePersonFor: (name: string) => `Delete ${name}`,
+    deleteDialog: {
+      title: (name: string) => `Delete ${name}?`,
+      body: (company: string) =>
+        `Their name and contact details will be removed from this browser, including your saved run reports. The ${company} lead stays.`,
+      stays: [
+        'Your own notes on this lead are kept as you wrote them, so they may still mention this person.',
+        'Backups and reports you already downloaded are files on your computer. The app can’t change them.',
+        'A later hunt may find this person again. To stop that, also add them to your do-not-contact list.',
+      ],
+      cancel: 'Cancel',
+      deleteOnly: 'Delete',
+      deleteAndBlock: 'Delete and don’t contact again',
+    },
+    deleted: (name: string) => `${name} was deleted.`,
+    deletedAndBlocked: (name: string) => `${name} was deleted and added to your do-not-contact list.`,
     markFollowup: (number: number) => `Mark follow-up ${number} as sent`,
     emailedOn: (date: string) => `Emailed ${date}`,
     followupSentOn: (number: number, date: string) => `Follow-up ${number} sent ${date}`,
@@ -596,6 +613,8 @@ export const strings = {
     contact: (name: string, role: string, email: string, label: string, evidence: string) =>
       `- Contact: ${name} (${role}). ${email} (${label}, ${evidence})`,
     noContact: '- Contact: nobody found yet.',
+    contactRemoved: '- Contact: (removed).',
+    removed: '(removed)',
     hook: (text: string, url: string) => `- Hook: ${text} ${url}`,
     followup: (company: string, emailedOn: string, number: number) =>
       `- ${company}: emailed ${emailedOn}, no reply. Follow-up ${number} is due.`,
