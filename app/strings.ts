@@ -73,6 +73,7 @@ export const strings = {
       caption: 'Optional. It encrypts the keys stored in this browser.',
       what: 'Someone who later reads this browser’s storage, as on a shared computer, can’t use your keys without it. It doesn’t protect a tab while it’s unlocked.',
       perTab: 'You enter it once in each tab. Reloading the page asks again.',
+      dontSave: 'On a shared computer, don’t let your browser save this passphrase. A saved one fills itself in, and anyone could unlock your keys.',
       noRecovery: 'There’s no way to get it back. If you forget it, you’ll have to remove your keys and add them again.',
       none: 'Your keys are stored without a passphrase.',
       locked: 'Your keys are encrypted and locked in this tab.',
@@ -98,6 +99,10 @@ export const strings = {
       forgotten: 'Your keys were removed.',
       failed: 'That didn’t work, and nothing was changed. Try again.',
       savingOff: 'Nothing is stored in this browser right now, so there are no keys to encrypt.',
+      damaged: 'Your stored keys are damaged and can’t be opened, even with the right passphrase. Remove them, then add your keys again.',
+      damagedConfirm: 'Remove the damaged keys? You can add them again from each provider.',
+      removeDamaged: 'Remove the damaged keys',
+      damagedKeyCard: 'Your stored keys are damaged. Remove them in the Key passphrase card, then add your key again.',
       lockedKeyCard: 'Your keys are locked. Unlock them in the Key passphrase card to test, add or remove a key.',
     },
     sources: {

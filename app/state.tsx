@@ -115,8 +115,8 @@ interface Actions {
   /** Deletes a key from storage at once (AC-10.1). Rejects if storage fails. */
   removeKey: (provider: ProviderId) => Promise<void>;
   deleteEverything: () => Promise<void>;
-  /** Opens the encrypted keys for this tab. False when the passphrase isn't right. */
-  unlockKeys: (passphrase: string) => Promise<boolean>;
+  /** Opens the encrypted keys for this tab. `wrong`: the passphrase isn't right; `damaged`: the stored keys can't be read. */
+  unlockKeys: (passphrase: string) => Promise<'unlocked' | 'wrong' | 'damaged'>;
   /** Encrypts the stored keys with a new passphrase, or changes it while unlocked. */
   setPassphrase: (passphrase: string) => Promise<void>;
   /** Stores the keys plain again. Only while unlocked. */
@@ -160,7 +160,8 @@ export interface AppState {
   changedElsewhere: false | 'dropped' | 'draft-kept' | 'keys-locked';
   /**
    * The key passphrase (FR-10.4): `none`, keys are stored plain; `locked`, they're
-   * encrypted and this tab hasn't been given the passphrase; `unlocked`, it has.
+   * encrypted and this tab hasn't been given the passphrase; `unlocked`, it has;
+   * `damaged`, the stored keys can't be read, and can only be removed.
    */
   keyLock: KeyLock;
   /** Counts the times another tab's saved data was read in. Screens use it as a key, so their forms start over. */
@@ -174,7 +175,8 @@ export interface AppState {
   actions: Actions;
 }
 
-export type KeyLock = 'none' | 'locked' | 'unlocked';
+/** `damaged`: the stored keys are encrypted but can't be read. They can only be removed. */
+export type KeyLock = 'none' | 'locked' | 'unlocked' | 'damaged';
 
 function providersWithKeys(keys: StoredKeys): ProviderId[] {
   return PROVIDER_IDS.filter((id) => Boolean(keys[id]));
@@ -301,6 +303,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * that key no longer fits, so the keys here lock, and the app says so.
    */
   const takeKeys = useCallback(async (record: KeyRecord) => {
+    if (record.kind === 'damaged') {
+      unlocked.current = null;
+      keys.current = {};
+      setKeyProviders([]);
+      setKeyLock('damaged');
+      return;
+    }
     if (record.kind === 'plain') {
       unlocked.current = null;
       keys.current = record.keys;
@@ -315,7 +324,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         keys.current = await openKeys(record.sealed, held);
         setKeyLock('unlocked');
         return;
-      } catch {
+      } catch (error) {
+        // The held key fits the record but an entry won't open: damaged, not changed elsewhere.
+        if (!(error instanceof WrongPassphraseError)) return takeKeys({ kind: 'damaged' });
         setChangedElsewhere((current) => current || 'keys-locked');
       }
     }
@@ -636,7 +647,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     /** Stores the keys: sealed with the passphrase when one is set, else plain. Never while locked. */
     const storeKeys = async (next: StoredKeys) => {
-      if (keyLockRef.current === 'locked') throw new Error('Unlock the keys first');
+      if (keyLockRef.current === 'locked' || keyLockRef.current === 'damaged') throw new Error('Unlock the keys first');
       if (savingOffRef.current) return;
       const held = unlocked.current;
       const record = held ? await sealKeys(next, held) : null;
@@ -780,25 +791,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       unlockKeys: async (passphrase) => {
         const record = await loadKeyRecord();
-        if (record.kind === 'plain') {
+        if (record.kind !== 'sealed') {
           await takeKeys(record);
-          return true;
+          return record.kind === 'damaged' ? 'damaged' : 'unlocked';
         }
+        let held: Unlocked;
         try {
-          const held = await unlock(record.sealed, passphrase);
+          held = await unlock(record.sealed, passphrase);
+        } catch (error) {
+          if (error instanceof WrongPassphraseError) return 'wrong';
+          await takeKeys({ kind: 'damaged' });
+          return 'damaged';
+        }
+        // The check entry proved the passphrase right, so any failure from here is damage.
+        try {
           keys.current = await openKeys(record.sealed, held);
           unlocked.current = held;
-        } catch (error) {
-          if (error instanceof WrongPassphraseError) return false;
-          throw error;
+        } catch {
+          await takeKeys({ kind: 'damaged' });
+          return 'damaged';
         }
         setKeyProviders(sealedProviders(record.sealed));
         setKeyLock('unlocked');
-        return true;
+        return 'unlocked';
       },
 
       setPassphrase: async (passphrase) => {
-        if (keyLockRef.current === 'locked') throw new Error('Unlock the keys first');
+        if (keyLockRef.current === 'locked' || keyLockRef.current === 'damaged') throw new Error('Unlock the keys first');
         const held = await newPassphrase(passphrase);
         const sealed = await sealKeys(keys.current, held);
         if (!savingOffRef.current) {

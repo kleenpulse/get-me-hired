@@ -209,6 +209,12 @@ describe('the keys record (FR-10.4)', () => {
     expect(JSON.stringify(record)).not.toContain('test-key-not-real');
   });
 
+  it('reads a damaged sealed record as damaged, never as plain keys', async () => {
+    const sealed = await sealKeys({ gemini: 'test-key-not-real-0000' }, await newPassphrase('correct horse', 1_000));
+    vi.stubGlobal('indexedDB', openWith({ ...sealed, salt: '!!not base64!!' }));
+    expect(await loadKeyRecord()).toEqual({ kind: 'damaged' });
+  });
+
   it('never reads a sealed record as plain keys', async () => {
     const sealed = await sealKeys({ gemini: 'test-key-not-real-0000' }, await newPassphrase('correct horse', 1_000));
     vi.stubGlobal('indexedDB', openWith(sealed));

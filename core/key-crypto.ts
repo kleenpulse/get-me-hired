@@ -42,11 +42,26 @@ export interface SealedKeys {
   entries: Partial<Record<ProviderId, Sealed>>;
 }
 
-/** The passphrase didn't open the keys. Nothing was changed. */
+/**
+ * The passphrase didn't open the keys, or the unlocked key belongs to another
+ * record (another tab set a new passphrase). Nothing was changed.
+ */
 export class WrongPassphraseError extends Error {
   constructor() {
     super("That passphrase isn't right");
     this.name = 'WrongPassphraseError';
+  }
+}
+
+/**
+ * A key entry couldn't be opened with a key that fits its record: the check
+ * entry already proved the passphrase right, so the stored entry is damaged
+ * (or was moved to another provider). Nothing was changed.
+ */
+export class DamagedKeysError extends Error {
+  constructor() {
+    super('The stored keys are damaged');
+    this.name = 'DamagedKeysError';
   }
 }
 
@@ -85,7 +100,8 @@ async function sealOne(key: CryptoKey, text: string, bound: string): Promise<Sea
   return { iv: toBase64(iv), ct: toBase64(new Uint8Array(ct)) };
 }
 
-async function openOne(key: CryptoKey, sealed: Sealed, bound: string): Promise<string> {
+/** Decrypts one entry. A failure throws what `failure` makes: what it means depends on the entry. */
+async function openOne(key: CryptoKey, sealed: Sealed, bound: string, failure: () => Error): Promise<string> {
   try {
     const plain = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: fromBase64(sealed.iv), additionalData: encoder.encode(bound) },
@@ -94,7 +110,7 @@ async function openOne(key: CryptoKey, sealed: Sealed, bound: string): Promise<s
     );
     return decoder.decode(plain);
   } catch {
-    throw new WrongPassphraseError();
+    throw failure();
   }
 }
 
@@ -134,30 +150,42 @@ export async function unlock(sealed: SealedKeys, passphrase: string): Promise<Un
     salt: sealed.salt,
     iterations: sealed.iterations,
   };
-  if ((await openOne(unlocked.key, sealed.check, CHECK)) !== CHECK_TEXT) throw new WrongPassphraseError();
+  // The check entry decides whether the passphrase is right.
+  const check = await openOne(unlocked.key, sealed.check, CHECK, () => new WrongPassphraseError());
+  if (check !== CHECK_TEXT) throw new WrongPassphraseError();
   return unlocked;
 }
 
 /**
- * Decrypts every key. All or nothing: one that fails (a wrong key, or a
- * ciphertext moved to another provider) rejects, and nothing is returned.
+ * Decrypts every key. All or nothing, and nothing is returned on a failure:
+ * - a key derived for another record (another salt or count) → WrongPassphraseError;
+ * - an entry that won't open with a key that fits the record → DamagedKeysError,
+ *   since the passphrase was already proven right by `unlock`.
  */
 export async function openKeys(sealed: SealedKeys, unlocked: Unlocked): Promise<Partial<Record<ProviderId, string>>> {
   if (sealed.salt !== unlocked.salt || sealed.iterations !== unlocked.iterations) throw new WrongPassphraseError();
   const keys: Partial<Record<ProviderId, string>> = {};
   for (const [id, entry] of Object.entries(sealed.entries)) {
-    if (isProviderId(id) && entry) keys[id] = await openOne(unlocked.key, entry, id);
+    if (isProviderId(id) && entry) keys[id] = await openOne(unlocked.key, entry, id, () => new DamagedKeysError());
   }
   return keys;
 }
 
+/** The length of what a base64 text decodes to, or `null` when it isn't base64. */
+function decodedLength(text: unknown): number | null {
+  if (typeof text !== 'string' || text.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(text)) return null;
+  try {
+    return atob(text).length;
+  } catch {
+    return null;
+  }
+}
+
+/** An IV of 12 bytes, and a ciphertext at least as long as AES-GCM's 16-byte tag. */
 function isSealedEntry(value: unknown): value is Sealed {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as Sealed).iv === 'string' &&
-    typeof (value as Sealed).ct === 'string'
-  );
+  if (typeof value !== 'object' || value === null) return false;
+  const ct = decodedLength((value as Sealed).ct);
+  return decodedLength((value as Sealed).iv) === IV_BYTES && ct !== null && ct >= 16;
 }
 
 /** True for a keys record written by `sealKeys`. */
@@ -171,12 +199,23 @@ export function isSealedKeys(value: unknown): value is SealedKeys {
     Number.isInteger(record.iterations) &&
     record.iterations >= 1 &&
     record.iterations <= MAX_ITERATIONS &&
-    typeof record.salt === 'string' &&
+    decodedLength(record.salt) === SALT_BYTES &&
     isSealedEntry(record.check) &&
     typeof record.entries === 'object' &&
     record.entries !== null &&
     Object.entries(record.entries).every(([id, entry]) => isProviderId(id) && isSealedEntry(entry))
   );
+}
+
+/**
+ * True for a record that was meant to be sealed (it says which version and KDF)
+ * but isn't one `isSealedKeys` accepts: damaged, so it can't be opened. It must
+ * never be read as plain keys, or quietly written over.
+ */
+export function isDamagedSealedKeys(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || isSealedKeys(value)) return false;
+  const record = value as Record<string, unknown>;
+  return 'kdf' in record || 'entries' in record || 'check' in record;
 }
 
 /** The providers that have a key in a sealed record, without opening it. */
