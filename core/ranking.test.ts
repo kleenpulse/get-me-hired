@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Contact, Lead, LeadSource, Person, Signal } from './lead';
+import { isScrubbed, REMOVED, type Contact, type Lead, type LeadSource, type Person, type Signal } from './lead';
 import { markEmailed, markFollowupSent, setStatus } from './lifecycle';
 import { ageHours, buildToday, computeTier, countDoneToday, newGroupOf } from './ranking';
 
@@ -321,5 +321,24 @@ describe('the daily target', () => {
     const followedToday = markFollowupSent(markEmailed(lead({ company: 'B' }), 0, '2026-11-09', NOW), 0, TODAY);
     const earlier = markEmailed(lead({ company: 'C' }), 0, '2026-11-13', NOW);
     expect(countDoneToday([emailedToday, followedToday, earlier], TODAY)).toEqual({ emailed: 1, followups: 1 });
+  });
+});
+
+describe('a lead whose people retention removed (FR-9.7)', () => {
+  const removed: Person = { name: REMOVED, role: '', contacts: [], emailedOn: [], followupsSent: [] };
+
+  it('is not listed as new, and takes no slot of the daily target', () => {
+    const scrubbed = lead({ company: 'Tidewell', people: [removed] });
+    expect(isScrubbed(scrubbed)).toBe(true);
+    // Room for everyone, so only the guard can keep it out.
+    const list = buildToday([scrubbed, lead({ company: 'Northpeak' })], { today: TODAY, nowMs: NOW_MS, dailyTarget: 100 });
+    expect(list.entries.map((entry) => entry.lead.company)).toEqual(['Northpeak']);
+    expect(list.entries.reduce((sum, entry) => sum + entry.people, 0)).toBe(1);
+  });
+
+  it('is told apart from a real person, and from a lead with nobody found yet', () => {
+    expect(isScrubbed(lead({ company: 'Real', people: [person('published', 'Ada Quill')] }))).toBe(false);
+    expect(isScrubbed(lead({ company: 'Nobody', people: [] }))).toBe(false);
+    expect(order([lead({ company: 'Nobody', people: [] })])).toEqual(['Nobody']);
   });
 });

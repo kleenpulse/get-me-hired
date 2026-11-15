@@ -11,12 +11,12 @@
 //   sample data is left alone (§13.2, FR-1.4).
 
 import { daysBetween, localDate } from '@/core/dates';
-import type { Lead, LeadStatus, Person } from '@/core/lead';
+import { isScrubbed, REMOVED, type Lead, type LeadStatus, type Person } from '@/core/lead';
 import type { AppData, RunRecord } from './data';
 import { erasePerson, scrubReport } from './erase';
 
-/** The name that stands in for the people retention removed. */
-export const REMOVED = '(removed)';
+// The stand-in and its check live in core, so the Today ranking can skip it too.
+export { isScrubbed, REMOVED };
 
 /** Leads that ended. Only these lose their people (§13.2). */
 const CLOSED: readonly LeadStatus[] = ['skip', 'rejected', 'no-reply'];
@@ -38,11 +38,6 @@ export function closedOn(lead: Lead): string | null {
     if (!Number.isNaN(at.getTime())) return localDate(at);
   }
   return lead.foundOn;
-}
-
-/** True once retention has replaced a lead's people. */
-export function isScrubbed(lead: Lead): boolean {
-  return lead.people.length === 1 && lead.people[0]?.name === REMOVED && lead.people[0].contacts.length === 0;
 }
 
 /** More than `days` whole local days before `today`. */
