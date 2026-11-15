@@ -1,7 +1,7 @@
 // Form fields from DESIGN.md: a 46px pill input with its label always above
 // it, a caption for help, and lists of items shown as chips (FR-3.4).
 
-import { Plus, X } from 'lucide-react';
+import { Check, Plus, X } from 'lucide-react';
 import { useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import { addItems, splitItems } from '@/core/profile';
 import { strings } from '@/app/strings';
@@ -180,5 +180,42 @@ export function ChipField({ label, help, required, values, onChange, examples = 
         {announcement}
       </p>
     </div>
+  );
+}
+
+interface ChoicePillsProps<T extends string> {
+  label: string;
+  name: string;
+  options: readonly T[];
+  labels: Record<T, string>;
+  value: T;
+  onChange: (value: T) => void;
+}
+
+/**
+ * One pick from a few options (DESIGN.md, Choice pills). Real radio inputs, so
+ * arrow keys move the choice, and a check icon, so it never rests on colour alone.
+ */
+export function ChoicePills<T extends string>({ label, name, options, labels, value, onChange }: ChoicePillsProps<T>) {
+  return (
+    <fieldset className="flex flex-col gap-1.5">
+      <legend className="mb-1.5 type-label">{label}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <label
+            key={option}
+            className={cx(
+              'inline-flex min-h-[46px] cursor-pointer items-center gap-2 rounded-pill px-4 type-label transition-[background-color,box-shadow] duration-150 ease-dawn',
+              'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring',
+              value === option ? 'bg-lift elev-lift' : 'bg-nested hover:brightness-95',
+            )}
+          >
+            <input type="radio" name={name} value={option} checked={value === option} onChange={() => onChange(option)} className="sr-only" />
+            {value === option && <Check size={16} strokeWidth={1.5} aria-hidden />}
+            {labels[option]}
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }

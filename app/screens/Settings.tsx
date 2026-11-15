@@ -1,4 +1,7 @@
-// Settings. For now it holds the AI provider and its key (FR-2.4, FR-10.1):
+// Settings: the AI provider and its key (FR-2.4, FR-10.1), the daily target and
+// follow-up rules (FR-10.2), and the theme and text size (FR-10.5).
+//
+// The key screen:
 // where to get a key, a key field that is hidden by default, a Test button,
 // and a plain-language reason when a test fails (AC-2.4). A key is saved only
 // after it works, and "Remove key" deletes it at once (AC-10.1).
@@ -16,8 +19,11 @@ import {
   type ProviderChecks,
   type ProviderId,
 } from '@/core/providers';
-import { INPUT } from '@/components/fields';
+import { closedByCadence } from '@/core/lifecycle';
+import { CLOSE_RANGE, DAILY_TARGET_RANGE, DELAY_RANGE, isValidDailyTarget, isWholeIn } from '@/core/settings-bounds';
+import { ChoicePills, INPUT } from '@/components/fields';
 import { Banner, Button, Card, cx, IconButton, StatusPill } from '@/components/ui';
+import { TEXT_SIZES, THEMES } from '../display';
 import { useApp } from '../state';
 import { strings } from '../strings';
 
@@ -318,6 +324,186 @@ export function Settings() {
         {/* A new card for each provider, so nothing typed for one carries over to another. */}
         <KeyCard key={selected} id={selected} />
       </div>
+
+      <div className="grid gap-gutter md:grid-cols-2 md:items-start">
+        <DayCard />
+        <LookCard />
+      </div>
     </div>
+  );
+}
+
+/** A whole number field that only accepts values in range. */
+function NumberField({
+  label,
+  help,
+  error,
+  value,
+  onChange,
+}: {
+  label: string;
+  help: string;
+  error: string | null;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="type-label">
+        {label}
+      </label>
+      <input
+        id={id}
+        inputMode="numeric"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={`${id}-help`}
+        className={cx(INPUT, 'max-w-32 tabular')}
+      />
+      <p id={`${id}-help`} className={cx('max-w-[68ch] type-caption', error ? 'text-critical' : 'text-ink-2')}>
+        {error ?? help}
+      </p>
+    </div>
+  );
+}
+
+const asWhole = (text: string) => (/^\d{1,4}$/.test(text.trim()) ? Number(text.trim()) : Number.NaN);
+
+/** FR-10.2: the daily target, and the follow-up rules (FRD §8.2), within their ranges. */
+function DayCard() {
+  const { data, today, now, actions } = useApp();
+  const d = t.day;
+  const settings = data.settings;
+  const [target, setTarget] = useState(String(settings.dailyTarget));
+  const [count, setCount] = useState(String(settings.cadence.followupDelays.length));
+  const [delays, setDelays] = useState(settings.cadence.followupDelays.map(String));
+  const [close, setClose] = useState(String(settings.cadence.closeAfter));
+  const [message, setMessage] = useState<string | null>(null);
+
+  const targetOk = isValidDailyTarget(asWhole(target));
+  const followups = Number(count);
+  const shown = Array.from({ length: followups }, (_, index) => delays[index] ?? '5');
+  const delaysOk = shown.map((delay) => isWholeIn(asWhole(delay), DELAY_RANGE));
+  const closeOk = isWholeIn(asWhole(close), CLOSE_RANGE);
+
+  const saveCadence = () => {
+    if (!delaysOk.every(Boolean) || !closeOk) return;
+    const cadence = { followupDelays: shown.map(asWhole), closeAfter: asWhole(close) };
+    // Follow-up dates are worked out from the emailed dates, so new rules act on the past.
+    const closing = closedByCadence(data.leads, today, now, cadence);
+    if (closing > 0 && !window.confirm(d.closes(closing))) return;
+    actions.updateSettings({ cadence });
+    setMessage(d.saved);
+  };
+
+  return (
+    <Card aria-labelledby="day-title" className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1 border-b border-hairline pb-4">
+        <h2 id="day-title" className="type-title">
+          {d.title}
+        </h2>
+        <p className="max-w-[68ch] text-ink-2 type-caption">{d.caption}</p>
+      </div>
+
+      <NumberField
+        label={d.target}
+        help={d.targetHelp(DAILY_TARGET_RANGE.min, DAILY_TARGET_RANGE.max)}
+        error={targetOk ? null : d.targetBad(DAILY_TARGET_RANGE.min, DAILY_TARGET_RANGE.max)}
+        value={target}
+        onChange={(text) => {
+          setTarget(text);
+          const value = asWhole(text);
+          if (isValidDailyTarget(value)) actions.updateSettings({ dailyTarget: value });
+        }}
+      />
+
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          saveCadence();
+        }}
+      >
+        <ChoicePills
+          label={d.followups}
+          name="followups"
+          options={['0', '1', '2', '3'] as const}
+          labels={{ 0: d.followupCount(0), 1: d.followupCount(1), 2: d.followupCount(2), 3: d.followupCount(3) }}
+          value={count as '0' | '1' | '2' | '3'}
+          onChange={(value) => {
+            setCount(value);
+            setMessage(null);
+          }}
+        />
+        <p className="-mt-2 max-w-[68ch] text-ink-2 type-caption">{d.followupsHelp}</p>
+        {shown.map((delay, index) => (
+          <NumberField
+            // The fields are numbered, and their order never changes.
+            key={index}
+            label={d.delay(index + 1)}
+            help={d.daysHelp(DELAY_RANGE.min, DELAY_RANGE.max)}
+            error={delaysOk[index] ? null : d.daysBad(DELAY_RANGE.min, DELAY_RANGE.max)}
+            value={delay}
+            onChange={(text) => {
+              setDelays(shown.map((old, at) => (at === index ? text : old)));
+              setMessage(null);
+            }}
+          />
+        ))}
+        <NumberField
+          label={d.closeAfter}
+          help={d.daysHelp(CLOSE_RANGE.min, CLOSE_RANGE.max)}
+          error={closeOk ? null : d.daysBad(CLOSE_RANGE.min, CLOSE_RANGE.max)}
+          value={close}
+          onChange={(text) => {
+            setClose(text);
+            setMessage(null);
+          }}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" disabled={!delaysOk.every(Boolean) || !closeOk}>
+            {d.save}
+          </Button>
+          <p role="status" className="text-ink-2 type-caption">
+            {message}
+          </p>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/** FR-10.5: theme and text size, applied at once. */
+function LookCard() {
+  const { data, actions } = useApp();
+  const l = t.look;
+  const display = data.settings.display;
+  return (
+    <Card aria-labelledby="look-title" className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1 border-b border-hairline pb-4">
+        <h2 id="look-title" className="type-title">
+          {l.title}
+        </h2>
+        <p className="max-w-[68ch] text-ink-2 type-caption">{l.caption}</p>
+      </div>
+      <ChoicePills
+        label={l.theme}
+        name="theme"
+        options={THEMES}
+        labels={l.themes}
+        value={display.theme}
+        onChange={(theme) => actions.updateSettings({ display: { ...display, theme } })}
+      />
+      <ChoicePills
+        label={l.textSize}
+        name="text-size"
+        options={TEXT_SIZES}
+        labels={l.textSizes}
+        value={display.textSize}
+        onChange={(textSize) => actions.updateSettings({ display: { ...display, textSize } })}
+      />
+    </Card>
   );
 }

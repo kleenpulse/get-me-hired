@@ -3,6 +3,7 @@ import { addDays, addWorkingDays, daysBetween, isWorkingDay, localDate, MAX_WORK
 import type { Lead, Person } from './lead';
 import {
   applyAutomaticMoves,
+  closedByCadence,
   DEFAULT_CADENCE,
   followupsDue,
   markEmailed,
@@ -254,5 +255,17 @@ describe('a bound on working days', () => {
     expect(far).toBe(addWorkingDays('2026-11-16', MAX_WORKING_DAYS));
     expect(addWorkingDays('2026-11-16', Number.NaN)).toBe('2026-11-16');
     expect(addWorkingDays('2026-11-16', -5)).toBe('2026-11-16');
+  });
+});
+
+describe('what a new cadence would do today', () => {
+  it('counts the emailed leads shorter rules would move to No reply, so the user is asked first', async () => {
+    const { buildSamplePipeline } = await import('./sample-leads');
+    const now = new Date(2026, 10, 16, 9, 0, 0);
+    // One lead in the sample pipeline was emailed a week ago, and nothing was sent since.
+    const leads = buildSamplePipeline(now);
+    const today = localDate(now);
+    expect(closedByCadence(leads, today, now, { followupDelays: [5, 7], closeAfter: 7 })).toBe(0);
+    expect(closedByCadence(leads, today, now, { followupDelays: [], closeAfter: 3 })).toBe(1);
   });
 });

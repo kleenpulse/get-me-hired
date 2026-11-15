@@ -1,6 +1,7 @@
 // What the app keeps in the browser. Keys are never part of this (FRD §11.1).
 
 import type { BlockEntry } from '@/core/block';
+import { DEFAULT_DISPLAY, isDisplay, type Display } from './display';
 import type { DroppedLead, HuntResult } from '@/core/hunt';
 import type { Lead } from '@/core/lead';
 import { DEFAULT_CADENCE, type Cadence } from '@/core/lifecycle';
@@ -19,6 +20,8 @@ export interface Settings {
   dailyTarget: number;
   /** The local date of the last backup download, for the 7-day reminder (FR-9.2). */
   lastBackupOn: string | null;
+  /** Theme and text size (FR-10.5). */
+  display: Display;
   cadence: Cadence;
   /** The provider hunts use. Only its name: the key itself is stored apart (see storage.ts). */
   provider: ProviderId | null;
@@ -66,6 +69,7 @@ export function emptyData(): AppData {
       cadence: DEFAULT_CADENCE,
       provider: null,
       lastBackupOn: null,
+      display: DEFAULT_DISPLAY,
     },
     runs: [],
     doNotContact: [],
@@ -80,6 +84,11 @@ export function withDefaults(saved: AppData): AppData {
     ...saved,
     profile: saved.profile ? { ...emptyProfile(), ...saved.profile } : null,
     doNotContact: Array.isArray(saved.doNotContact) ? saved.doNotContact : [],
-    settings: { ...fresh.settings, ...saved.settings },
+    settings: {
+      ...fresh.settings,
+      ...saved.settings,
+      // Older data has no display settings, and a bad value falls back to the defaults.
+      display: isDisplay(saved.settings?.display) ? saved.settings.display : DEFAULT_DISPLAY,
+    },
   };
 }

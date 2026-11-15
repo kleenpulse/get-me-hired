@@ -140,6 +140,15 @@ function statusBeforeSnooze(lead: Lead): LeadStatus {
  *   - `not-now` returns to its earlier status on its return date
  * Call it when the app opens and when the date changes.
  */
+/**
+ * How many emailed leads a cadence would move to "no reply" today. Follow-up
+ * dates are worked out from the emailed dates each time, so a shorter cadence
+ * acts on the past: the Settings screen says how many before saving one.
+ */
+export function closedByCadence(leads: readonly Lead[], today: string, now: Date, cadence: Cadence): number {
+  return leads.filter((lead) => lead.status === 'emailed' && applyAutomaticMoves(lead, today, now, cadence).status === 'no-reply').length;
+}
+
 export function applyAutomaticMoves(lead: Lead, today: string, now: Date, cadence: Cadence = DEFAULT_CADENCE): Lead {
   if (lead.status === 'not-now' && lead.snoozeUntil !== null && lead.snoozeUntil <= today) {
     const back = withStatus(lead, statusBeforeSnooze(lead), now);

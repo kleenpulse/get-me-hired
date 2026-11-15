@@ -94,3 +94,10 @@ describe('loading keys', () => {
     expect(await loadKeys()).toEqual({});
   });
 });
+
+describe('saved display settings', () => {
+  it('falls back to the defaults when the saved theme or text size is unknown', async () => {
+    vi.stubGlobal('indexedDB', openWith({ formatVersion: 1, leads: [], settings: { display: { theme: 'neon', textSize: 'huge' } }, runs: [] }));
+    expect((await loadData())?.settings.display).toEqual({ theme: 'system', textSize: 'normal' });
+  });
+});

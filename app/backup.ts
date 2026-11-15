@@ -20,6 +20,7 @@ import { normaliseUrl } from '@/core/lead-key';
 import { leadToRow, rowToLead } from '@/core/lead-row';
 import { LEAD_STATUSES, parseLeadsCsv, writeLeadsCsv } from '@/core/leads-csv';
 import type { Cadence } from '@/core/lifecycle';
+import { isValidCadence, isValidDailyTarget } from '@/core/settings-bounds';
 import { looksLikeProfileMd, readProfileMd, writeProfileMd, type Profile } from '@/core/profile';
 import { isProviderId } from '@/core/providers';
 import { readZip, writeZip, ZipError, type Inflate, type ZipFile } from '@/core/zip';
@@ -244,9 +245,6 @@ function readRun(value: unknown, reports: Map<string, string>): RunRecord | null
   };
 }
 
-const isWholeIn = (value: unknown, min: number, max: number): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
-
 /**
  * Settings from a backup, only when every value is in the ranges the app
  * allows: FRD §8.2's delays of 3 to 10 working days, 0 to 3 follow-ups, and a
@@ -255,13 +253,11 @@ const isWholeIn = (value: unknown, min: number, max: number): value is number =>
  * open, which would leave the app stuck for good.
  */
 function readSettings(value: unknown): Incoming['settings'] {
-  if (!isObject(value) || !isObject(value.cadence)) return null;
-  const { daily_target: dailyTarget } = value;
-  const { followupDelays, closeAfter } = value.cadence;
-  if (!isWholeIn(dailyTarget, 1, 100) || !isWholeIn(closeAfter, 3, 10)) return null;
-  if (!Array.isArray(followupDelays) || followupDelays.length > 3) return null;
-  if (!followupDelays.every((delay) => isWholeIn(delay, 3, 10))) return null;
-  return { dailyTarget, cadence: { followupDelays: followupDelays as number[], closeAfter } };
+  if (!isObject(value) || !isValidDailyTarget(value.daily_target) || !isValidCadence(value.cadence)) return null;
+  return {
+    dailyTarget: value.daily_target,
+    cadence: { followupDelays: [...value.cadence.followupDelays], closeAfter: value.cadence.closeAfter },
+  };
 }
 
 /** Reads a backup ZIP. Only the exact paths above are read. Nothing is saved here. */
