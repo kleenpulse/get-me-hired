@@ -333,6 +333,18 @@ nonfintech fintechs`)).toContain('outside-domains');
     expect(mentionsWords('Zoë builds Fintech', 'fintech')).toBe(true);
   });
 
+  it('matches a field however it is spaced or hyphenated, and never inside another word', () => {
+    expect(mentionsWords('We make AI-dev tools', 'AI dev tools')).toBe(true);
+    expect(mentionsWords('A Health-tech startup', 'health tech')).toBe(true);
+    expect(mentionsWords('Big in e-commerce', 'ecommerce')).toBe(true);
+    expect(mentionsWords('Big in ecommerce', 'e-commerce')).toBe(true);
+    expect(mentionsWords('data/ML platform', 'ML')).toBe(true);
+    expect(mentionsWords('A biotech startup', 'tech')).toBe(false);
+    expect(mentionsWords('We maintain servers', 'ai')).toBe(false);
+    expect(mentionsWords('AI tools for teams', 'ai')).toBe(true);
+    expect(mentionsWords('fintechs everywhere', 'fintech')).toBe(false);
+  });
+
   it('drops a company the comment never names', () => {
     expect(judge({ ...keep, company: 'Globex' }, comment, PROFILE, NOW)).toMatchObject({
       kind: 'drop',

@@ -454,7 +454,7 @@ export const strings = {
       relocation: 'Needs a move',
       'visa-unknown': 'Visa help unknown',
       'seniority-stretch': 'Senior for you',
-      'outside-domains': 'Outside your fields',
+      'outside-domains': 'Doesn’t mention your fields',
       'no-open-role': 'No open role',
       'equity-only': 'Equity only',
       timezone: 'Far time zone',
