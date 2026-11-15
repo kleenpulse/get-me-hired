@@ -56,6 +56,7 @@ import { browserLocks, withHuntLock } from './hunt-lock';
 import { unsavedScreen } from './router';
 import { withNotes } from './notes-saver';
 import { applyRetention } from './retention';
+import { NO_FILTER, type BoardFilter } from './board-filter';
 import { shouldRunOnOpen } from './run-on-open';
 import { anySourceOn, huntSources } from './sources';
 import { TabSync } from './tab-sync';
@@ -134,6 +135,7 @@ interface Actions {
   lockKeys: () => void;
   /** A forgotten passphrase: deletes every stored key. Nothing can be recovered. */
   forgetKeys: () => Promise<void>;
+  setBoardFilter: (filter: BoardFilter) => void;
   /** Hides the note that another tab changed the data. */
   dismissChangedElsewhere: () => void;
 }
@@ -175,6 +177,11 @@ export interface AppState {
   keyLock: KeyLock;
   /** Counts the times another tab's saved data was read in. Screens use it as a key, so their forms start over. */
   reloads: number;
+  /**
+   * The Board's search and filters (FR-6.6). Kept here, above the screens, so another
+   * tab's save doesn't clear a search. In memory only: never saved, gone on reload.
+   */
+  boardFilter: BoardFilter;
   /**
    * The providers that have a key saved. The keys themselves stay inside the
    * provider component, so no screen can show or log one by accident.
@@ -285,6 +292,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const channel = useRef<BroadcastChannel | null>(null);
   const [changedElsewhere, setChangedElsewhere] = useState<AppState['changedElsewhere']>(false);
   const [reloads, setReloads] = useState(0);
+  const [boardFilter, setBoardFilter] = useState<BoardFilter>(NO_FILTER);
 
   // Keeps this tab in step with the others: ordered writes over the right revision, and
   // never a copy built before another tab's data was read in (tab-sync.ts).
@@ -802,6 +810,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
 
       dismissChangedElsewhere: () => setChangedElsewhere(false),
+      setBoardFilter,
 
       unlockKeys: async (passphrase) => {
         const record = await loadKeyRecord();
@@ -897,8 +906,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [startHunt, tabSync, takeKeys, commit]);
 
   const state = useMemo<AppState>(
-    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, keyProviders, hunt, actions }),
-    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, keyProviders, hunt, actions],
+    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, boardFilter, keyProviders, hunt, actions }),
+    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, keyLock, reloads, boardFilter, keyProviders, hunt, actions],
   );
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { COMMENTS, ITEM_ANSWER, SEARCH_ANSWER, THREAD_ID } from '@/fixtures/hn-thread';
 import { commentUrl, htmlToText, profileWords, shortlist } from './hn';
-import { asData, judge, type Verdict } from './hn-hunt';
+import { asData, judge, mentionsWords, type Verdict } from './hn-hunt';
 import type { HuntProgress, HuntResult } from './hunt';
 import { emptyProfile, type Profile } from './profile';
 import { createRealHunt } from './real-hunt';
@@ -314,6 +314,24 @@ describe('judging one verdict', () => {
     fit: 'Frontend role.',
     hook: '',
   };
+
+  it("marks an opening that mentions none of the profile's fields, checked as whole words (§9.2)", () => {
+    const signalsFor = (domains: string[], text = comment.text) => {
+      const judged = judge(keep, { ...comment, text }, { ...PROFILE, domains }, NOW);
+      return judged.kind === 'keep' ? judged.lead.signals : [];
+    };
+    expect(signalsFor(['fintech'])).toContain('outside-domains');
+    expect(signalsFor(['fintech'], `${comment.text}
+We build Fintech tools.`)).not.toContain('outside-domains');
+    expect(signalsFor(['AI dev tools'], `${comment.text}
+AI Dev Tools for teams.`)).not.toContain('outside-domains');
+    // Whole words only: "fintechs" and "nonfintech" don't count.
+    expect(signalsFor(['fintech'], `${comment.text}
+nonfintech fintechs`)).toContain('outside-domains');
+    // No fields in the profile: nothing is checked, so nothing is marked.
+    expect(signalsFor([])).not.toContain('outside-domains');
+    expect(mentionsWords('Zoë builds Fintech', 'fintech')).toBe(true);
+  });
 
   it('drops a company the comment never names', () => {
     expect(judge({ ...keep, company: 'Globex' }, comment, PROFILE, NOW)).toMatchObject({
