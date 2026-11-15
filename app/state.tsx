@@ -16,7 +16,7 @@ import { sameEntry, type BlockEntry } from '@/core/block';
 import { spentThisMonth } from '@/core/budget';
 import { localDate } from '@/core/dates';
 import { waitingSteps, type HuntProgress, type HuntResult, type HuntRunner, type HuntStep } from '@/core/hunt';
-import { cleanNotes, type Lead, type LeadStatus, type StatusChange } from '@/core/lead';
+import type { Lead, LeadStatus, StatusChange } from '@/core/lead';
 import { cleanProfile, missingFields, type Profile } from '@/core/profile';
 import { classifyProviderError, PROVIDER_IDS, PROVIDERS, type ProviderId } from '@/core/providers';
 import {
@@ -54,6 +54,7 @@ import { capAllowsStart, capState, type CapState } from './cap';
 import { addFound, applyBlocks } from './found';
 import { browserLocks, withHuntLock } from './hunt-lock';
 import { unsavedScreen } from './router';
+import { withNotes } from './notes-saver';
 import { applyRetention } from './retention';
 import { shouldRunOnOpen } from './run-on-open';
 import { anySourceOn, huntSources } from './sources';
@@ -693,7 +694,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markEmailed: (key, personIndex) =>
         update(key, (lead, moment) => markEmailed(lead, personIndex, localDate(moment), moment)),
       unmarkEmailed: (key, personIndex) => update(key, (lead, moment) => unmarkEmailed(lead, personIndex, moment)),
-      setNotes: (key, notes) => update(key, (lead) => (lead.notes === cleanNotes(notes) ? lead : { ...lead, notes: cleanNotes(notes) })),
+      // A functional update on the data as it is now, so notes typed while another tab's data was read in land on it.
+      setNotes: (key, notes) => setData((current) => withNotes(current, key, notes)),
       markFollowupSent: (key, personIndex) =>
         update(key, (lead, moment) => markFollowupSent(lead, personIndex, localDate(moment))),
       setStatus: (key, status, options) => {

@@ -11,6 +11,7 @@ import { PROVIDERS } from '@/core/providers';
 import { newGroupOf, type TodayReason } from '@/core/ranking';
 import { ageText, freshness, roleText, roundAgeText, shortDate, whyLine } from '@/app/format';
 import { isScrubbed } from '@/app/retention';
+import { createNotesSaver, type NotesSaver } from '@/app/notes-saver';
 import { useApp } from '@/app/state';
 import { strings } from '@/app/strings';
 import { ContactLabelPill, FreshnessChip, TierChip } from './lead-parts';
@@ -276,22 +277,46 @@ function NotesBlock({ lead }: { lead: Lead }) {
   const id = useId();
   const [text, setText] = useState(lead.notes);
   const [saved, setSaved] = useState(false);
-  // What this box last saved, so a change made elsewhere (an import) shows here.
+  // What this box last saved, so a change made elsewhere (an import) shows here, and its own
+  // save never rewrites the box while you type (a trailing space would vanish).
   const lastSaved = useRef(lead.notes);
+  const mounted = useRef(true);
+  const key = lead.key;
+  // Saves as you type, after a pause, and when the box, the page or the card goes away
+  // (notes-saver.ts). Only a real change is saved.
+  const saver = useRef<NotesSaver | null>(null);
+  if (!saver.current) {
+    saver.current = createNotesSaver(
+      (notes) => {
+        lastSaved.current = notes;
+        actions.setNotes(key, notes);
+        if (mounted.current) setSaved(true);
+      },
+      lead.notes,
+      { set: (run, ms) => window.setTimeout(run, ms), clear: (timer) => window.clearTimeout(timer) },
+    );
+  }
+
   useEffect(() => {
     if (lead.notes === lastSaved.current) return;
     lastSaved.current = lead.notes;
+    saver.current?.saved(lead.notes);
     setText(lead.notes);
   }, [lead.notes]);
 
+  useEffect(() => {
+    mounted.current = true;
+    const onHide = () => saver.current?.flush();
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      mounted.current = false;
+      window.removeEventListener('pagehide', onHide);
+      saver.current?.dispose();
+    };
+  }, []);
+
   const dirty = cleanNotes(text) !== lead.notes;
-  const save = () => {
-    if (!dirty) return;
-    const next = cleanNotes(text);
-    lastSaved.current = next;
-    actions.setNotes(lead.key, next);
-    setSaved(true);
-  };
+  const save = () => saver.current?.flush();
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -306,6 +331,7 @@ function NotesBlock({ lead }: { lead: Lead }) {
         value={text}
         onChange={(event) => {
           setText(event.target.value);
+          saver.current?.change(event.target.value);
           setSaved(false);
         }}
         onBlur={save}
