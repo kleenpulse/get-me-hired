@@ -424,11 +424,12 @@ export const strings = {
 
   board: {
     title: 'Board',
-    intro: 'Every lead, from found to offer. Move a lead with its "Move to" menu.',
+    intro: 'Every lead, from found to offer. Move a lead with its "Move to" menu, or drag it to a column.',
     count: (count: number) => plural(count, 'lead', 'leads'),
     emptyColumn: 'Nothing here.',
     moved: (company: string, status: string) => `${company} moved to ${status}.`,
     undo: 'Undo',
+    changeBack: 'To change it back, use its Move to menu.',
     undone: (company: string, status: string) => `${company} is back in ${status}.`,
     cantUndo: (company: string) => `Can’t undo: ${company} changed since.`,
     dismiss: 'Dismiss',
