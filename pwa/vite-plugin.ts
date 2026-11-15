@@ -8,8 +8,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
-import { swRoute } from '../app/sw-route';
-import { strings } from '../app/strings';
+import { swRoute } from '../app/sw-route.ts';
+import { strings } from '../app/strings.ts';
 
 /** The icons, rendered once from assets/favicon.svg (see CLAUDE.md, "App icons"). */
 const ICONS = [
