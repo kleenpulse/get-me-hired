@@ -44,6 +44,32 @@ export const strings = {
 
   settings: {
     title: 'Settings',
+    day: {
+      title: 'Your day',
+      caption: 'How many people to write to, and when to follow up. Changes save as you make them.',
+      target: 'People to write to each day',
+      targetHelp: (min: number, max: number) => `A number from ${min} to ${max}. Today's list stops there.`,
+      targetBad: (min: number, max: number) => `Use a whole number from ${min} to ${max}.`,
+      followups: 'Follow-ups',
+      followupsHelp: 'How many short follow-ups to send when someone hasn’t replied.',
+      followupCount: (count: number) => (count === 0 ? 'None' : String(count)),
+      delay: (number: number) => `Working days before follow-up ${number}`,
+      closeAfter: 'Working days after the last email before a lead moves to No reply',
+      daysHelp: (min: number, max: number) => `${min} to ${max} working days (Monday to Friday).`,
+      daysBad: (min: number, max: number) => `Use a whole number from ${min} to ${max}.`,
+      save: 'Save follow-up rules',
+      saved: 'Follow-up rules saved.',
+      closes: (count: number) =>
+        `With these rules, ${plural(count, 'emailed lead', 'emailed leads')} would move to No reply today. Save anyway?`,
+    },
+    look: {
+      title: 'Look',
+      caption: 'Saved in this browser.',
+      theme: 'Theme',
+      themes: { system: 'Match this device', light: 'Light', dark: 'Dark' },
+      textSize: 'Text size',
+      textSizes: { normal: 'Normal', large: 'Large', larger: 'Larger' },
+    },
     provider: {
       title: 'AI provider',
       caption: 'The service that searches and reads web pages for your hunts. You connect it with your own key.',

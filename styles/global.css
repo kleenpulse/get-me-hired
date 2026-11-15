@@ -252,6 +252,8 @@
 
 @layer base {
   html {
+    /* The Text size setting (FR-10.5): 100%, 112.5% or 125%, set from script. */
+    font-size: var(--text-scale, 100%);
     font-family: var(--font-sans);
     background: var(--band);
     color: var(--foreground);

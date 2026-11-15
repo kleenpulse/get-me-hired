@@ -26,7 +26,8 @@ import {
 } from '@/core/lifecycle';
 import { createSampleHunt, type Pause } from '@/core/sample-hunt';
 import { buildSamplePipeline } from '@/core/sample-leads';
-import { emptyData, type AppData } from './data';
+import { emptyData, type AppData, type Settings } from './data';
+import { applyDisplay, clearDisplayCopy, DEFAULT_DISPLAY, writeDisplayCopy } from './display';
 import {
   clearData,
   loadData,
@@ -69,6 +70,8 @@ interface Actions {
   saveProfile: (profile: Profile) => void;
   /** Runs the app in memory only, after the browser refused to store data. */
   continueWithoutSaving: () => void;
+  /** Changes settings that save as they're made: the daily target, the cadence, the display (FR-10.2, FR-10.5). */
+  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display'>>) => void;
   /**
    * Adds entries to the do-not-contact list (FR-5.7) and applies them to saved
    * leads at once: leads on a blocked domain are removed, and blocked people and
@@ -265,6 +268,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [ready, today]);
 
+  // Theme and text size follow the settings. The fast copy is kept only when saving is on (display.ts).
+  const display = data.settings.display;
+  useEffect(() => {
+    if (!ready) return;
+    applyDisplay(display);
+    if (savingOff || loadFailed) return;
+    // Kept only when it differs from the defaults, so after "Delete everything" nothing is left behind.
+    if (display.theme === DEFAULT_DISPLAY.theme && display.textSize === DEFAULT_DISPLAY.textSize) clearDisplayCopy();
+    else writeDisplayCopy(display);
+  }, [ready, display, savingOff, loadFailed]);
+
   // Stop a running hunt if the app goes away.
   useEffect(() => () => huntControl.current?.abort(), []);
 
@@ -400,6 +414,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       saveProfile: (profile) => setData((current) => ({ ...current, profile: cleanProfile(profile) })),
 
+      updateSettings: (change) => setData((current) => ({ ...current, settings: { ...current.settings, ...change } })),
+
       // A functional update, so a change already queued (a hunt finishing, a lead marked
       // emailed) is never overwritten. The count for the message comes from the same helper.
       block: (entries) => {
@@ -463,6 +479,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // With saving off there is nothing stored, and storage would refuse the request anyway.
         if (!savingOffRef.current) await clearData();
         const fresh = emptyData();
+        // The theme and text size copy goes too: Delete everything wipes all app data (FR-9.5).
+        clearDisplayCopy();
         // With saving off, the welcome screens stay skipped: their last step says data is saved.
         if (savingOffRef.current) fresh.settings.welcomeDone = true;
         keys.current = {};
