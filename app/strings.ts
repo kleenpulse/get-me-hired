@@ -306,6 +306,19 @@ export const strings = {
       'This version reads the Hacker News hiring thread and checks each opening against your profile. Fresh posts and funding news come later.',
     sampleHuntNote: 'A sample hunt searches nothing and sends nothing to any service.',
     sourcesOff: 'Every source is off. Turn one on in Settings.',
+    interrupted: {
+      body: (found: number, cost: string | null) =>
+        [
+          'Your last hunt stopped partway.',
+          found === 0 ? 'It hadn’t found any leads yet.' : found === 1 ? 'The 1 lead it found is kept.' : `The ${found} leads it found are kept.`,
+          cost === null ? '' : `The ${cost} it cost at the list price counts toward your cap.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      note: 'Running it again searches from the start and counts toward your monthly cap again.',
+      runAgain: 'Run it again',
+      dismiss: 'Dismiss',
+    },
     keysLocked: 'Your keys are locked. Enter your passphrase in Settings to hunt.',
     huntCost: (estimate: string, spent: string, cap: string) =>
       `A hunt costs about ${estimate} at the list price, if your key is billed. This month so far: ${spent} of your ${cap} cap.`,

@@ -81,7 +81,8 @@ export function addFound(data: AppData, result: HuntResult, now: Date, sample: b
     report,
     reportName: reportFileName(date, earlier),
   };
-  return { ...data, leads, runs: [...data.runs, run] };
+  // The hunt is done, so it's no longer in progress (FR-4.15).
+  return { ...data, leads, runs: [...data.runs, run], huntInProgress: null };
 }
 
 /**

@@ -16,7 +16,11 @@ import { anySourceOn } from './sources';
  * A hunt that failed today counts as run, so a broken key or a provider that's
  * down never starts a new hunt every time the tab is opened.
  */
-export function shouldRunOnOpen(data: Pick<AppData, 'settings' | 'profile' | 'runs'>, keyProviders: readonly ProviderId[], today: string): boolean {
+export function shouldRunOnOpen(
+  data: Pick<AppData, 'settings' | 'profile' | 'runs' | 'huntInProgress'>,
+  keyProviders: readonly ProviderId[],
+  today: string,
+): boolean {
   const { settings, profile, runs } = data;
   if (!settings.runOnOpen || !settings.welcomeDone || settings.sampleMode) return false;
   // Every source off: a hunt would search nothing, and its empty run would block the day.
@@ -25,5 +29,7 @@ export function shouldRunOnOpen(data: Pick<AppData, 'settings' | 'profile' | 'ru
   if (!provider || !keyProviders.includes(provider)) return false;
   if (!profile || missingFields(profile).length > 0) return false;
   if (runs.some((run) => !run.sample && run.date === today)) return false;
+  // A hunt that stopped partway waits for the user to choose what to do with it (FR-4.15).
+  if (data.huntInProgress) return false;
   return capAllowsStart(capState(data, provider, today));
 }

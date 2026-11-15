@@ -38,6 +38,7 @@ import { Banner, Button, Card, cx, IconButton, StatusPill, Tag } from '@/compone
 import { TEXT_SIZES, THEMES } from '../display';
 import { usd } from '../format';
 import { retentionDue } from '../retention';
+import { spendRecords } from '../cap';
 import { useApp } from '../state';
 import { strings } from '../strings';
 
@@ -825,7 +826,7 @@ function SpendCard() {
   const s = t.spend;
   const [cap, setCap] = useState(String(data.settings.monthlyCap));
   const capOk = isValidMonthlyCap(asWhole(cap));
-  const spent = spentThisMonth(data.runs, today);
+  const spent = spentThisMonth(spendRecords(data), today);
 
   return (
     <Card aria-labelledby="spend-title" className="flex flex-col gap-5">

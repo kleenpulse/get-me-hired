@@ -170,7 +170,7 @@ function capNote(cap: CapState): string {
 }
 
 export function Today() {
-  const { data, today, now, hunt, keyProviders, keyLock, actions } = useApp();
+  const { data, today, now, hunt, keyProviders, keyLock, interruptedHunt, actions } = useApp();
   const [filter, setFilter] = useState<Filter>('all');
   const { sampleMode, dailyTarget, cadence } = data.settings;
 
@@ -307,6 +307,29 @@ export function Today() {
               }
             >
               {hunt.message}
+            </Banner>
+          </div>
+        )}
+
+        {/* FRD §10.2: a hunt that stopped partway, found on open (FR-4.15). */}
+        {interruptedHunt && !hunt.running && (
+          <div role="status">
+            <Banner
+              tone="warning"
+              icon={TriangleAlert}
+              action={
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="primary" onClick={() => actions.settleInterrupted(true)} disabled={!canHunt || !capOk}>
+                    {t.interrupted.runAgain}
+                  </Button>
+                  <Button onClick={() => actions.settleInterrupted(false)}>{t.interrupted.dismiss}</Button>
+                </div>
+              }
+            >
+              <span className="flex flex-col gap-1">
+                <span>{t.interrupted.body(interruptedHunt.leads.length, interruptedHunt.chargedUsd === null ? null : usd(interruptedHunt.chargedUsd))}</span>
+                <span className="text-ink-2 type-caption">{t.interrupted.note}</span>
+              </span>
             </Banner>
           </div>
         )}

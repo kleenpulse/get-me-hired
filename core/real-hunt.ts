@@ -84,7 +84,13 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
     // reported nothing at their bound, for the next hunt's monthly total (AC-4.13).
     const budget = new Budget(PROVIDERS[settings.provider].model, settings.cap?.usd ?? Infinity, settings.cap?.spentUsd ?? 0);
 
-    const report = () => onProgress({ steps: steps.map((step) => ({ ...step })), kept: leads.length, dropped: dropped.length });
+    const report = () =>
+      onProgress({
+        steps: steps.map((step) => ({ ...step })),
+        kept: leads.length,
+        dropped: dropped.length,
+        checkpoint: { leads: [...leads], dropped: [...dropped], usage, chargedUsd: budget.runCost(usage) },
+      });
     const set = (id: HuntStepId, change: Partial<HuntStep>) => {
       Object.assign(steps.find((step) => step.id === id) ?? {}, change);
       report();
@@ -154,6 +160,8 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
         // A call that didn't say what it used is charged at its bound, never at $0.
         if (next.unreported > usage.unreported) budget.chargeUnreported(bound);
         usage = next;
+        // Each call is reported as it lands, so a tab closed mid-hunt still counts it (FR-4.15).
+        report();
       },
       addFailedSource: (host) => {
         if (!failedSources.includes(host)) failedSources.push(host);
