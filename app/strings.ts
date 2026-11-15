@@ -903,7 +903,7 @@ export const strings = {
       title: 'Linked folder',
       body: 'If you use the Get Me Hired skill in a coding agent, link the folder it writes to, and the app reads your profile, leads and reports from it.',
       linked: (name: string) => `Linked to the folder “${name}”.`,
-      note: 'The app reads your folder, and saves to it only when you click Save. Before the first save each day, it keeps a copy of your files in the folder’s .get-me-hired folder.',
+      note: 'The app reads your folder, and saves to it only when you click Save. Before the first save each day, it keeps a copy of your files in the folder’s .get-me-hired folder, for the last 14 days you saved.',
       unsupported: 'Your browser can’t link a folder. Chrome and Edge can. Use backup and restore below instead.',
       link: 'Link a folder',
       read: 'Read from folder',
@@ -915,13 +915,16 @@ export const strings = {
       saving: 'Saving to the folder…',
       writeDenied: 'The browser didn’t allow saving to this folder, so nothing was saved.',
       nothingToSave: 'Your folder already has everything here. Nothing was changed.',
-      saved: (files: number, backupDay: string | null, kept: number, blocked: number, added: number) =>
+      saved: (files: number, backupDay: string | null, kept: number, blocked: number, added: number, heldPeople: number) =>
         [
           `Saved ${plural(files, 'file', 'files')} to your folder.`,
           backupDay ? `A copy of the files from before is in .get-me-hired/backups/${backupDay}.` : '',
           kept > 0 ? `${plural(kept, 'row', 'rows')} the app can’t read in full ${kept === 1 ? 'was' : 'were'} left exactly as ${kept === 1 ? 'it was' : 'they were'}.` : '',
           blocked > 0 ? `${plural(blocked, 'row', 'rows')} on your do-not-contact list ${blocked === 1 ? 'was' : 'were'} taken out.` : '',
           added > 0 ? `${plural(added, 'lead', 'leads')} from the folder ${added === 1 ? 'was' : 'were'} added here.` : '',
+          heldPeople > 0
+            ? `${plural(heldPeople, 'row', 'rows')} kept as ${heldPeople === 1 ? 'it was' : 'they were'} may still hold people you deleted here. Edit leads.csv in the folder to remove them.`
+            : '',
         ]
           .filter(Boolean)
           .join(' '),

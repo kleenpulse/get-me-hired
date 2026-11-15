@@ -8,7 +8,9 @@
 //   key, and every row of a lead the app doesn't have stay exactly as the file
 //   has them. Only rows of leads on the do-not-contact list are taken out.
 // - Before the first save of each day, the folder's files are copied to
-//   .get-me-hired/backups/<date>/.
+//   .get-me-hired/backups/<date>/. After a save that made a new one, only the
+//   14 newest complete day folders are kept (pruneBackups, the one place this
+//   app deletes in the user's folder, held to exact names).
 // - A report is never overwritten: one with the same name but other words is
 //   saved under the next free name, <date>-2.md and so on.
 // - The files are the export's files (backupFiles): no sample data, no keys.
@@ -24,6 +26,7 @@ import { looksLikeProfileMd, readProfileMd } from '@/core/profile';
 import type { ZipFile } from '@/core/zip';
 import { backupFiles, mergeBackup, readBackupFiles, type ImportProblem, type Incoming, type MergeSummary } from './backup';
 import type { AppData } from './data';
+import type { Lead } from '@/core/lead';
 import { collectFolderFiles, RUN_FILE, TOP_FILES, type FolderFile, type FolderHandle } from './folder';
 
 /** The writing parts of the File System Access API, so tests can pass stand-ins. */
@@ -40,12 +43,15 @@ export interface WritableFile extends FolderFile {
 export interface WritableFolder extends FolderHandle {
   getFileHandle(name: string, options?: { create?: boolean }): Promise<WritableFile>;
   getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<WritableFolder>;
-  removeEntry(name: string): Promise<void>;
+  removeEntry(name: string, options?: { recursive?: boolean }): Promise<void>;
 }
 
 export const BACKUP_FOLDER = '.get-me-hired';
 /** Written last into a day's backup, so a backup cut short is made again. */
 const BACKUP_DONE = '.complete';
+/** How many complete day folders of backups are kept. */
+export const KEEP_BACKUPS = 14;
+const BACKUP_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface FolderPlan {
   /** The files to write, in the order they are written. */
@@ -54,6 +60,11 @@ export interface FolderPlan {
   keptAsWritten: number;
   /** Rows taken out because the do-not-contact list blocks their lead. */
   blockedRows: number;
+  /**
+   * Rows left as they were that name a person or address the app's copy of the
+   * lead no longer has, for example after deleting a person (FR-9.5).
+   */
+  heldPeople: number;
 }
 
 const decoder = new TextDecoder();
@@ -71,7 +82,18 @@ function freeName(wanted: string, taken: ReadonlySet<string>): string {
 }
 
 /** leads.csv for the folder: the app's rows, with the rows it can't hold left as they were. */
-function mergedLeadsCsv(existing: string, data: AppData): { text: string; keptAsWritten: number; blockedRows: number } {
+/** True when the row names someone, or an address, that the app's lead doesn't have. */
+function namesOthers(row: Lead, ours: Lead): boolean {
+  const names = new Set(ours.people.map((person) => person.name.trim().toLowerCase()));
+  const values = new Set(ours.people.flatMap((person) => person.contacts.map((contact) => contact.value.trim().toLowerCase())));
+  return row.people.some(
+    (person) =>
+      (person.name.trim() !== '' && !names.has(person.name.trim().toLowerCase())) ||
+      person.contacts.some((contact) => !values.has(contact.value.trim().toLowerCase())),
+  );
+}
+
+function mergedLeadsCsv(existing: string, data: AppData): { text: string; keptAsWritten: number; blockedRows: number; heldPeople: number } {
   const parsed = parseLeadsCsv(existing);
   // The caller has checked the file reads; an empty one has no rows to keep.
   const imported = parsed.ok ? parsed.leads : [];
@@ -80,6 +102,7 @@ function mergedLeadsCsv(existing: string, data: AppData): { text: string; keptAs
   const rows: string[][] = [];
   let keptAsWritten = 0;
   let blockedRows = 0;
+  let heldPeople = 0;
 
   for (const row of imported) {
     const lead = rowToLead(row);
@@ -99,6 +122,7 @@ function mergedLeadsCsv(existing: string, data: AppData): { text: string; keptAs
     }
     // Left as it is: the app can't hold it in full, it repeats a key, or the app doesn't have it.
     keptAsWritten += 1;
+    if (ours && namesOthers(lead, ours)) heldPeople += 1;
     if (ours) written.add(lead.key);
     rows.push([...LEADS_CSV_HEADER.map((name) => row.row[name]), ...row.extraFields]);
   }
@@ -107,7 +131,7 @@ function mergedLeadsCsv(existing: string, data: AppData): { text: string; keptAs
     const line = leadToRow(lead, data.settings.cadence);
     rows.push(LEADS_CSV_HEADER.map((name) => line[name]));
   }
-  return { text: writeCsv([LEADS_CSV_HEADER, ...rows]), keptAsWritten, blockedRows };
+  return { text: writeCsv([LEADS_CSV_HEADER, ...rows]), keptAsWritten, blockedRows, heldPeople };
 }
 
 /**
@@ -136,6 +160,7 @@ export function planFolderWrite(existing: readonly ZipFile[], data: AppData): Fo
   const file = (name: string) => exported.find((entry) => entry.name === name);
   let keptAsWritten = 0;
   let blockedRows = 0;
+  let heldPeople = 0;
 
   const writes: ZipFile[] = [...newReports];
   const leads = file('leads.csv');
@@ -145,6 +170,7 @@ export function planFolderWrite(existing: readonly ZipFile[], data: AppData): Fo
       const merged = mergedLeadsCsv(decoder.decode(oldLeads), data);
       keptAsWritten = merged.keptAsWritten;
       blockedRows = merged.blockedRows;
+      heldPeople = merged.heldPeople;
       writes.push({ name: 'leads.csv', data: encoder.encode(merged.text) });
     } else {
       writes.push(leads);
@@ -170,6 +196,7 @@ export function planFolderWrite(existing: readonly ZipFile[], data: AppData): Fo
     }),
     keptAsWritten,
     blockedRows,
+    heldPeople,
   };
 }
 
@@ -184,6 +211,7 @@ export type WriteResult =
       wrote: number;
       keptAsWritten: number;
       blockedRows: number;
+      heldPeople: number;
       backedUp: boolean;
     }
   | { ok: false; problem: WriteProblem; incoming: Incoming | null };
@@ -227,6 +255,38 @@ async function backUp(folder: WritableFolder, files: readonly ZipFile[], day: st
 }
 
 /**
+ * Keeps the newest complete day folders of backups and deletes the older ones.
+ * It deletes only folders directly inside .get-me-hired/backups/ that are named
+ * like a day and hold the .complete marker this app writes; anything else there
+ * is left alone. Returns the names it deleted.
+ */
+export async function pruneBackups(folder: WritableFolder, keep = KEEP_BACKUPS): Promise<string[]> {
+  let backups: WritableFolder;
+  try {
+    backups = await (await folder.getDirectoryHandle(BACKUP_FOLDER)).getDirectoryHandle('backups');
+  } catch {
+    return [];
+  }
+  const complete: string[] = [];
+  for await (const entry of backups.values()) {
+    if (entry.kind !== 'directory' || !BACKUP_DAY.test(entry.name)) continue;
+    if (await exists(await backups.getDirectoryHandle(entry.name), BACKUP_DONE, 'file')) complete.push(entry.name);
+  }
+  // Day names sort as dates, so the newest come first when sorted down.
+  const old = complete.sort().reverse().slice(keep);
+  const removed: string[] = [];
+  for (const name of old) {
+    try {
+      await backups.removeEntry(name, { recursive: true });
+      removed.push(name);
+    } catch {
+      // A folder that can't be removed stays; the save itself already succeeded.
+    }
+  }
+  return removed;
+}
+
+/**
  * Saves the app's data to the folder: read, merge, back up, then write. Call it
  * only after the user clicked Save and the browser granted write access.
  */
@@ -255,5 +315,16 @@ export async function writeFolder(folder: WritableFolder, current: AppData, day:
   } catch {
     return { ok: false, problem: 'write-failed', incoming };
   }
-  return { ok: true, incoming, summary, wrote: plan.writes.length, keptAsWritten: plan.keptAsWritten, blockedRows: plan.blockedRows, backedUp };
+  // Only after today's backup and the whole save succeeded.
+  if (backedUp) await pruneBackups(folder).catch(() => []);
+  return {
+    ok: true,
+    incoming,
+    summary,
+    wrote: plan.writes.length,
+    keptAsWritten: plan.keptAsWritten,
+    blockedRows: plan.blockedRows,
+    heldPeople: plan.heldPeople,
+    backedUp,
+  };
 }
