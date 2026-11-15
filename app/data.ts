@@ -1,5 +1,6 @@
 // What the app keeps in the browser. Keys are never part of this (FRD §11.1).
 
+import type { BlockEntry } from '@/core/block';
 import type { DroppedLead, HuntResult } from '@/core/hunt';
 import type { Lead } from '@/core/lead';
 import { DEFAULT_CADENCE, type Cadence } from '@/core/lifecycle';
@@ -49,6 +50,8 @@ export interface AppData {
   leads: Lead[];
   settings: Settings;
   runs: RunRecord[];
+  /** The do-not-contact list (FR-5.7). Kept until the user removes an entry. */
+  doNotContact: BlockEntry[];
 }
 
 export function emptyData(): AppData {
@@ -65,6 +68,7 @@ export function emptyData(): AppData {
       lastBackupOn: null,
     },
     runs: [],
+    doNotContact: [],
   };
 }
 
@@ -75,6 +79,7 @@ export function withDefaults(saved: AppData): AppData {
     ...fresh,
     ...saved,
     profile: saved.profile ? { ...emptyProfile(), ...saved.profile } : null,
+    doNotContact: Array.isArray(saved.doNotContact) ? saved.doNotContact : [],
     settings: { ...fresh.settings, ...saved.settings },
   };
 }

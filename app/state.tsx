@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { sameEntry, type BlockEntry } from '@/core/block';
 import { localDate } from '@/core/dates';
 import { waitingSteps, type HuntProgress, type HuntResult, type HuntRunner, type HuntStep } from '@/core/hunt';
 import type { Lead, LeadStatus } from '@/core/lead';
@@ -25,7 +26,7 @@ import {
 } from '@/core/lifecycle';
 import { createSampleHunt, type Pause } from '@/core/sample-hunt';
 import { buildSamplePipeline } from '@/core/sample-leads';
-import { emptyData, type AppData, type RunRecord } from './data';
+import { emptyData, type AppData } from './data';
 import {
   clearData,
   loadData,
@@ -41,7 +42,7 @@ import {
 } from './storage';
 import type { Incoming, MergeSummary } from './backup';
 import { downloadBlob } from './download';
-import { reportFileName, writeRunReport } from './run-report';
+import { addFound, applyBlocks } from './found';
 import { strings } from './strings';
 
 export interface HuntState {
@@ -68,6 +69,13 @@ interface Actions {
   saveProfile: (profile: Profile) => void;
   /** Runs the app in memory only, after the browser refused to store data. */
   continueWithoutSaving: () => void;
+  /**
+   * Adds entries to the do-not-contact list (FR-5.7) and applies them to saved
+   * leads at once: leads on a blocked domain are removed, and blocked people and
+   * addresses taken off. Returns how many leads were removed.
+   */
+  block: (entries: BlockEntry[]) => number;
+  unblock: (entry: BlockEntry) => void;
   /** Downloads a backup ZIP of the real data, and notes the date (FR-9.2). */
   exportBackup: () => Promise<void>;
   /** Brings a read backup in, merged by lead key (FR-6.8). Resolves with what happened. */
@@ -159,49 +167,6 @@ function huntMessage(result: HuntResult, added: number, provider: ProviderId | n
   ]
     .filter(Boolean)
     .join(' ');
-}
-
-/** Adds the leads a hunt found. A lead whose key already exists changes nothing (FR-6.8). */
-function addFound(data: AppData, result: HuntResult, now: Date, sample: boolean, provider: ProviderId | null): AppData {
-  const known = new Set(data.leads.map((lead) => lead.key));
-  const fresh = result.leads.filter((lead) => !known.has(lead.key));
-  // A lead found again counts as a duplicate in the report, never as kept twice (FR-6.8).
-  const again = result.leads
-    .filter((lead) => known.has(lead.key))
-    .map((lead) => ({ company: lead.company, reason: 'duplicate' as const, sourceUrl: lead.sources[0]?.url ?? '' }));
-  const dropped = [...result.dropped, ...again];
-  const date = localDate(now);
-  const leads = [...data.leads, ...fresh];
-  // Sample hunts are numbered apart, since they are never exported with real ones (FR-1.4).
-  const earlier = data.runs.filter((run) => run.date === date && run.sample === sample).length;
-  const report = writeRunReport({
-    date,
-    status: result.status,
-    ...(result.problem ? { problem: result.problem } : {}),
-    sample,
-    provider: sample ? null : provider,
-    kept: fresh,
-    dropped,
-    steps: result.steps,
-    failedSources: result.failedSources ?? [],
-    unread: result.unread ?? 0,
-    usage: result.usage ?? null,
-    leads,
-    cadence: data.settings.cadence,
-  });
-  const run: RunRecord = {
-    at: now.toISOString(),
-    date,
-    status: result.status,
-    kept: fresh.length,
-    dropped,
-    sample,
-    provider: sample ? null : provider,
-    ...(result.problem ? { problem: result.problem } : {}),
-    report,
-    reportName: reportFileName(date, earlier),
-  };
-  return { ...data, leads, runs: [...data.runs, run] };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -328,6 +293,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               profile,
               fetch: window.fetch.bind(window),
               knownKeys: new Set(leads.map((lead) => lead.key)),
+              blockList: latest.current.doNotContact,
               // Off for now: Gemini's page reader can't see links, so no round can be confirmed
               // at its own article (AC-4.6), and the stage would spend a minute to keep nothing.
               // It comes back on with a page reader that returns links (Firecrawl, FR-2.3). FRD §19.
@@ -433,6 +399,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setStatus: (key, status) => update(key, (lead, moment) => setStatus(lead, status, localDate(moment), moment)),
 
       saveProfile: (profile) => setData((current) => ({ ...current, profile: cleanProfile(profile) })),
+
+      // A functional update, so a change already queued (a hunt finishing, a lead marked
+      // emailed) is never overwritten. The count for the message comes from the same helper.
+      block: (entries) => {
+        setData((current) => applyBlocks(current, entries).data);
+        return applyBlocks(latest.current, entries).removed;
+      },
+
+      unblock: (entry) =>
+        setData((current) => ({ ...current, doNotContact: current.doNotContact.filter((known) => !sameEntry(known, entry)) })),
 
       // The backup code loads only when it's used, so the first page load doesn't pay for it.
       exportBackup: async () => {

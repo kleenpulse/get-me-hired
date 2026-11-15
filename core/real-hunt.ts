@@ -9,6 +9,7 @@
 // Load this module with a dynamic import: it sets up Zod before any schema
 // exists (see loadSdk in providers.ts).
 
+import { applyBlockList, type BlockEntry } from './block';
 import { waitingSteps, type DroppedLead, type HuntResult, type HuntRunner, type HuntStep, type HuntStepId } from './hunt';
 import type { Lead } from './lead';
 import type { Profile } from './profile';
@@ -26,6 +27,8 @@ export interface RealHuntSettings {
   sources?: { funding?: boolean; community?: boolean };
   /** The funding listing pages to read. Defaults to FUNDING_LISTINGS in funding.ts. */
   fundingListings?: readonly string[];
+  /** The do-not-contact list (FR-5.7), applied to every lead before it is kept. */
+  blockList?: readonly BlockEntry[];
 }
 
 /** What a stage gets: the settings, the SDK, and one place to keep and drop leads. */
@@ -111,10 +114,16 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
       sdk,
       model,
       set,
-      keep: (lead) => {
-        if (settings.knownKeys.has(lead.key) || leads.some((found) => found.key === lead.key)) {
-          dropped.push({ company: lead.company, reason: 'duplicate', sourceUrl: lead.sources[0]?.url ?? '' });
-        } else leads.push(lead);
+      keep: (found) => {
+        const sourceUrl = found.sources[0]?.url ?? '';
+        // Blocked domains are dropped, and blocked people and addresses taken off (FR-5.7).
+        // The drop keeps only the company and its source, never a blocked name or address (§13).
+        const blocked = applyBlockList(found, settings.blockList ?? []);
+        if (blocked.kind === 'drop') {
+          dropped.push({ company: found.company, reason: 'do-not-contact', sourceUrl });
+        } else if (settings.knownKeys.has(found.key) || leads.some((lead) => lead.key === found.key)) {
+          dropped.push({ company: found.company, reason: 'duplicate', sourceUrl });
+        } else leads.push(blocked.lead);
         report();
       },
       drop: (entry) => {

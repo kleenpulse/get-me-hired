@@ -360,6 +360,10 @@ export const strings = {
     copied: 'Copied',
     openMail: (name: string) => `Open your mail app to write to ${name}`,
     markEmailed: 'Mark as emailed',
+    dontContact: 'Don’t contact',
+    dontContactFor: (name: string) => `Don’t contact ${name}`,
+    dontContactConfirm: (name: string, company: string) =>
+      `Block ${name} at ${company}? They will be taken off this lead and left out of every hunt. You can unblock them under Data.`,
     markFollowup: (number: number) => `Mark follow-up ${number} as sent`,
     emailedOn: (date: string) => `Emailed ${date}`,
     followupSentOn: (number: number, date: string) => `Follow-up ${number} sent ${date}`,
@@ -621,6 +625,32 @@ export const strings = {
       warning: 'If you clear this browser’s data, your leads are deleted too. Keep a backup somewhere safe.',
       savingOff: (browser: string) =>
         `Saving is off: ${browser} is not letting Get Me Hired store data. Your leads and profile last only until you close this tab.`,
+    },
+    block: {
+      title: 'Do-not-contact list',
+      body: 'People, addresses and whole domains you never want to see again, for example after someone asks not to be contacted. They are left out of every hunt, and taken off your saved leads.',
+      label: 'An address or a domain',
+      placeholder: 'name@company.com or company.com',
+      add: 'Block',
+      empty: 'Nobody is blocked.',
+      listLabel: 'Blocked',
+      kinds: {
+        email: (value: string) => `${value}: this address`,
+        domain: (value: string) => `${value}: every lead on this domain, and its subdomains`,
+        person: (name: string, at: string) => `${name}, at ${at}`,
+      },
+      unblock: (value: string) => `Unblock ${value}`,
+      invalid: 'That isn’t an email address or a domain.',
+      shared: 'Many unrelated people use that domain, so it can’t be blocked as a whole. Block their address instead.',
+      already: 'That is already on the list.',
+      confirmTitle: (domain: string) => `Block ${domain}?`,
+      confirmBody: (count: number) =>
+        `${plural(count, 'saved lead is', 'saved leads are')} on this domain. Blocking it removes ${count === 1 ? 'it' : 'them'} from your lists, and this can’t be undone.`,
+      confirm: 'Block and remove',
+      cancel: 'Cancel',
+      done: (value: string, removed: number) =>
+        removed > 0 ? `Blocked ${value}. ${plural(removed, 'lead was', 'leads were')} removed.` : `Blocked ${value}.`,
+      unblocked: (value: string) => `Unblocked ${value}. Leads already removed don’t come back.`,
     },
     backup: {
       title: 'Backup',
