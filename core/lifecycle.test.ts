@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addWorkingDays, daysBetween, isWorkingDay, localDate } from './dates';
+import { addDays, addWorkingDays, daysBetween, isWorkingDay, localDate, MAX_WORKING_DAYS } from './dates';
 import type { Lead, Person } from './lead';
 import {
   applyAutomaticMoves,
@@ -243,5 +243,16 @@ describe('manual moves (§8.2)', () => {
     current = markEmailed(current, 1, '2026-12-09', NOW);
     // Person A is past the last wait on 11 December, but person B was only just emailed.
     expect(applyAutomaticMoves(current, '2026-12-11', NOW).status).toBe('emailed');
+  });
+});
+
+describe('a bound on working days', () => {
+  it('stops at MAX_WORKING_DAYS, so a huge count from a bad file can never freeze the app', () => {
+    const started = performance.now();
+    const far = addWorkingDays('2026-11-16', 1e9);
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(far).toBe(addWorkingDays('2026-11-16', MAX_WORKING_DAYS));
+    expect(addWorkingDays('2026-11-16', Number.NaN)).toBe('2026-11-16');
+    expect(addWorkingDays('2026-11-16', -5)).toBe('2026-11-16');
   });
 });

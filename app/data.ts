@@ -16,6 +16,8 @@ export interface Settings {
   sampleMode: boolean;
   /** How many people to write to in a day (FR-4.14). */
   dailyTarget: number;
+  /** The local date of the last backup download, for the 7-day reminder (FR-9.2). */
+  lastBackupOn: string | null;
   cadence: Cadence;
   /** The provider hunts use. Only its name: the key itself is stored apart (see storage.ts). */
   provider: ProviderId | null;
@@ -60,6 +62,7 @@ export function emptyData(): AppData {
       dailyTarget: DEFAULT_DAILY_TARGET,
       cadence: DEFAULT_CADENCE,
       provider: null,
+      lastBackupOn: null,
     },
     runs: [],
   };

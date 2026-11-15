@@ -1,0 +1,227 @@
+import { describe, expect, it } from 'vitest';
+import { BOMB_ZIP, BY_HAND_ZIP, NEWER_ZIP } from '@/fixtures/backup-zips';
+import { LEADS_CSV_HEADER } from '@/core/leads-csv';
+import { emptyProfile, type Profile } from '@/core/profile';
+import { buildSampleFinds, buildSamplePipeline } from '@/core/sample-leads';
+import { readZip, writeZip } from '@/core/zip';
+import { backupFiles, backupZip, mergeBackup, readBackup } from './backup';
+import { emptyData, type AppData, type RunRecord } from './data';
+import { inflateRaw } from './inflate';
+
+const NOW = new Date('2026-11-15T12:00:00Z');
+const KEY = 'test-key-not-real-0000';
+
+const fromBase64 = (text: string) => Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
+
+// Invented people only: the sample leads, made "real" for the round trip.
+function realData(): AppData {
+  const finds = buildSampleFinds(NOW);
+  const leads = [...buildSamplePipeline(NOW), ...finds.posts, ...finds.funding, ...finds.community].map((lead) => ({
+    ...lead,
+    sample: false,
+    notes: lead.company === 'Quarry' ? 'Said to write again in January.' : '',
+  }));
+  const profile: Profile = {
+    ...emptyProfile(),
+    roles: ['Design engineer'],
+    skills: ['React', 'Motion'],
+    location: 'Lagos, Nigeria',
+    remote: 'remote',
+    floor: '$60k a year',
+    proofLinks: [{ url: 'https://ada.example/work', line: 'A booking app' }],
+  };
+  const run: RunRecord = {
+    at: '2026-11-15T09:00:00.000Z',
+    date: '2026-11-15',
+    status: 'completed',
+    kept: 3,
+    dropped: [{ company: 'Brindle Talent', reason: 'recruiter', sourceUrl: 'https://news.ycombinator.com/item?id=2' }],
+    sample: false,
+    provider: 'gemini',
+    report: '# Hunt: 2026-11-15\n\nCompleted.\n',
+    reportName: '2026-11-15.md',
+  };
+  const sampleRun: RunRecord = { ...run, at: '2026-11-15T10:00:00.000Z', sample: true, reportName: '2026-11-15.md', report: '# sample\n' };
+  const sampleLead = { ...leads[0]!, key: 'https://sample.example/x|sample co', company: 'Sample Co', sample: true };
+  const base = emptyData();
+  return {
+    ...base,
+    profile,
+    leads: [...leads, sampleLead],
+    runs: [run, sampleRun],
+    settings: { ...base.settings, welcomeDone: true, provider: 'gemini' },
+  };
+}
+
+describe('the backup (FR-9.2, AC-9.2)', () => {
+  it('round-trips the leads, people, statuses, notes, profile and history into a fresh browser', async () => {
+    const data = realData();
+    const read = await readBackup(backupZip(data, NOW), inflateRaw);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    const { data: restored, summary } = mergeBackup(emptyData(), read.incoming, false);
+
+    expect(restored.leads).toEqual(data.leads.filter((lead) => !lead.sample));
+    expect(restored.profile).toEqual(data.profile);
+    expect(restored.runs).toEqual(data.runs.filter((run) => !run.sample));
+    expect(summary).toEqual({ added: data.leads.length - 1, alreadyHere: 0, profile: 'added', runsAdded: 1, needsReview: 0 });
+  });
+
+  it("writes the skill's files, with the leads.csv header exactly as FRD §11.2 says", async () => {
+    const names = backupFiles(realData()).map((file) => file.name);
+    expect(names).toEqual(['profile.md', 'leads.csv', 'runs/2026-11-15.md', 'get-me-hired.json']);
+    const files = await readZip(backupZip(realData(), NOW));
+    const csv = new TextDecoder().decode(files.find((file) => file.name === 'leads.csv')?.data);
+    expect(csv.split('\n')[0]).toBe(LEADS_CSV_HEADER.join(','));
+  });
+
+  it('never exports sample leads, sample runs, or a key (FR-1.4, §11.1)', () => {
+    const data = realData();
+    const text = new TextDecoder().decode(backupZip(data, NOW));
+    expect(text).not.toContain('Sample Co');
+    expect(text).not.toContain('# sample');
+    expect(text).not.toContain(KEY);
+    expect(text).not.toMatch(/"keys"|apiKey/);
+  });
+
+  it('reads a backup someone zipped by hand, ignoring stray paths and refusing unsafe values', async () => {
+    const read = await readBackup(fromBase64(BY_HAND_ZIP), inflateRaw);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    const { leads, profile, runs, needsReview } = read.incoming;
+    expect(profile?.roles).toEqual(['Frontend engineer']);
+    expect(leads.map((lead) => lead.company)).toEqual(['Quillstack', 'Mosswood']);
+    expect(leads[0]?.people[0]?.contacts).toEqual([
+      { method: 'email', value: 'ana@quillstack.example', label: 'published', evidence: 'https://news.ycombinator.com/item?id=90000101' },
+    ]);
+    // An address with "?subject=" and a "javascript:" form are refused at the seam (AC-6.5).
+    expect(leads[1]?.people.flatMap((person) => person.contacts)).toEqual([]);
+    expect(runs.map((run) => run.reportName)).toEqual(['2026-11-10.md']);
+    // Its lists match in length, so the row itself is fine: only the unsafe values were refused.
+    expect(needsReview).toBe(0);
+    // The planted key in the JSON is never read.
+    expect(JSON.stringify(read.incoming)).not.toContain('planted-key');
+  });
+
+  it('refuses a backup from a newer version (FRD §11.4)', async () => {
+    expect(await readBackup(fromBase64(NEWER_ZIP), inflateRaw)).toEqual({ ok: false, problem: 'newer' });
+  });
+
+  it('stops unpacking a ZIP bomb as soon as it passes the limit', async () => {
+    expect(await readBackup(fromBase64(BOMB_ZIP), inflateRaw)).toEqual({ ok: false, problem: 'too-big' });
+  });
+
+  it('says plainly when a file is not a ZIP, or not a backup', async () => {
+    expect(await readBackup(new TextEncoder().encode('company,role\n'), inflateRaw)).toEqual({ ok: false, problem: 'not-zip' });
+    const other = writeZip([{ name: 'photo.txt', data: new TextEncoder().encode('hello') }]);
+    expect(await readBackup(other, inflateRaw)).toEqual({ ok: false, problem: 'not-backup' });
+  });
+});
+
+describe('importing into data already here (FR-6.8)', () => {
+  it("keeps this browser's status, marks and notes for a lead in both, and only adds what it lacks", async () => {
+    const data = realData();
+    const read = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!read.ok) throw new Error('backup unreadable');
+    const mine = { ...data.leads[0]!, status: 'replied' as const, notes: 'Mine', statusHistory: [{ status: 'replied' as const, at: '2026-11-14T08:00:00.000Z' }] };
+    const current: AppData = { ...emptyData(), leads: [mine], profile: { ...emptyProfile(), roles: ['Mine'] } };
+
+    const { data: merged, summary } = mergeBackup(current, read.incoming, false);
+    const lead = merged.leads.find((entry) => entry.key === mine.key);
+    expect(lead?.status).toBe('replied');
+    expect(lead?.notes).toBe('Mine');
+    // The backup's history is added, in time order, and nothing moves the status back.
+    expect(lead?.statusHistory.at(-1)).toEqual({ status: 'replied', at: '2026-11-14T08:00:00.000Z' });
+    expect(lead?.statusHistory.length).toBeGreaterThan(1);
+    expect(merged.profile?.roles).toEqual(['Mine']);
+    expect(summary.profile).toBe('kept');
+    expect(summary.alreadyHere).toBe(1);
+
+    expect(mergeBackup(current, read.incoming, true).data.profile).toEqual(data.profile);
+  });
+
+  it('brings settings only into a fresh browser', async () => {
+    const data = realData();
+    data.settings.dailyTarget = 12;
+    const read = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!read.ok) throw new Error('backup unreadable');
+    expect(mergeBackup(emptyData(), read.incoming, false).data.settings.dailyTarget).toBe(12);
+    const used: AppData = { ...emptyData(), leads: [data.leads[0]!] };
+    expect(mergeBackup(used, read.incoming, false).data.settings.dailyTarget).toBe(20);
+  });
+});
+
+describe('a hostile backup', () => {
+  const zipWith = (extras: unknown) =>
+    writeZip([
+      { name: 'get-me-hired.json', data: new TextEncoder().encode(JSON.stringify(extras)) },
+      { name: 'leads.csv', data: new TextEncoder().encode(`${LEADS_CSV_HEADER.join(',')}\n`) },
+    ]);
+  const settingsOf = async (settings: unknown) => {
+    const read = await readBackup(zipWith({ format_version: 1, settings }), inflateRaw);
+    if (!read.ok) throw new Error('backup unreadable');
+    return read.incoming.settings;
+  };
+  const cadence = (followupDelays: unknown, closeAfter: unknown, dailyTarget: unknown = 20) => ({
+    daily_target: dailyTarget,
+    cadence: { followupDelays, closeAfter },
+  });
+
+  it('keeps settings that are in range (FRD §8.2)', async () => {
+    expect(await settingsOf(cadence([5, 7], 7, 12))).toEqual({ dailyTarget: 12, cadence: { followupDelays: [5, 7], closeAfter: 7 } });
+    expect(await settingsOf(cadence([], 3))).toEqual({ dailyTarget: 20, cadence: { followupDelays: [], closeAfter: 3 } });
+  });
+
+  it('ignores settings out of range, which could otherwise freeze the app for good', async () => {
+    for (const bad of [
+      cadence([1e9], 7),
+      cadence([5, 7], 1e9),
+      cadence([2.5], 7),
+      cadence([-1], 7),
+      cadence([5, 5, 5, 5], 7),
+      cadence([2], 7),
+      cadence([11], 7),
+      cadence('5', 7),
+      cadence([5, 7], 7, 0),
+      cadence([5, 7], 7, 1e9),
+      cadence([5, 7], 7, 2.5),
+    ]) {
+      expect(await settingsOf(bad)).toBeNull();
+    }
+  });
+
+  it('keeps only drop reasons the app knows', async () => {
+    const read = await readBackup(
+      zipWith({
+        format_version: 1,
+        runs: [
+          {
+            at: '2026-11-15T09:00:00.000Z',
+            date: '2026-11-15',
+            status: 'completed',
+            kept: 0,
+            dropped: [
+              { company: 'Fennel', reason: 'location', sourceUrl: 'https://fennel.example', extra: 'ignored' },
+              { company: 'Odd', reason: 'because I said so', sourceUrl: 'https://odd.example' },
+            ],
+          },
+        ],
+      }),
+      inflateRaw,
+    );
+    if (!read.ok) throw new Error('backup unreadable');
+    expect(read.incoming.runs[0]?.dropped).toEqual([{ company: 'Fennel', reason: 'location', sourceUrl: 'https://fennel.example' }]);
+  });
+
+  it('never unpacks an entry it will not read', async () => {
+    const wanted: string[] = [];
+    const inflate: typeof inflateRaw = async (data, max) => {
+      wanted.push('inflated');
+      return inflateRaw(data, max);
+    };
+    // The hand-made fixture holds ../evil.txt and notes/secret.txt beside the 4 backup files.
+    const read = await readBackup(fromBase64(BY_HAND_ZIP), inflate);
+    expect(read.ok).toBe(true);
+    expect(wanted).toHaveLength(4);
+  });
+});

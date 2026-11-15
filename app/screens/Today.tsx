@@ -6,6 +6,7 @@ import {
   BellRing,
   Check,
   FlaskConical,
+  HardDrive,
   Megaphone,
   MessagesSquare,
   Minus,
@@ -15,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { useMemo, useState, type CSSProperties } from 'react';
+import { daysBetween } from '@/core/dates';
 import { missingFields } from '@/core/profile';
 import { buildToday, type TodayGroup } from '@/core/ranking';
 import { LeadCard } from '@/components/LeadCard';
@@ -166,6 +168,12 @@ export function Today() {
   const doneToday = list.done.emailed + list.done.followups;
 
   const missing = missingFields(data.profile);
+  // A gentle reminder after 7 days without a backup, once there are real leads to lose (FR-9.2).
+  const realLeads = data.leads.some((lead) => !lead.sample);
+  const lastBackup = data.settings.lastBackupOn;
+  const daysSinceBackup = lastBackup ? daysBetween(lastBackup, today) : null;
+  const backupDue: number | 'never' | null =
+    !realLeads ? null : daysSinceBackup === null ? 'never' : daysSinceBackup >= 7 ? daysSinceBackup : null;
   const provider = data.settings.provider;
   const hasKey = provider !== null && keyProviders.includes(provider);
   // A real hunt needs a complete profile and a saved key (FR-3.6). A sample hunt needs neither.
@@ -267,6 +275,22 @@ export function Today() {
               {hunt.message}
             </Banner>
           </div>
+        )}
+
+        {backupDue !== null && (
+          <Banner
+            icon={HardDrive}
+            action={
+              <Link
+                to="data"
+                className="inline-flex min-h-11 items-center rounded-pill bg-glass px-4 no-underline type-label hover:brightness-95"
+              >
+                {strings.data.backup.reminderAction}
+              </Link>
+            }
+          >
+            {backupDue === 'never' ? strings.data.backup.reminderNever : strings.data.backup.reminder(backupDue)}
+          </Banner>
         )}
 
         {sampleMode && (

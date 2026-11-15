@@ -681,6 +681,7 @@ The welcome screen and the Data screen show: "You decide how to use these contac
 | Tracker pages list old rounds as news | Stale leads (one $58M "seed" from March showed up in November) | Confirm every round at its source (AC-4.6) |
 | A user clears browser data, or Safari evicts it | Leads and keys are lost | Persistent storage request, Safari warning, backup reminders, linked folder (FR-9.1–9.3) |
 | A user pastes a key on a shared computer | Someone else could use the key | Passphrase encryption (FR-10.4), "Remove key", a shared-computer warning during key setup |
+| A page-derived cell in the exported `leads.csv` starts with `=`, `+`, `-`, `@` or a tab | Opened in Excel or Google Sheets, the cell may run as a formula | **Open, for the owner to decide.** Escaping such cells (a leading `'`) protects spreadsheet users but changes the values the agent skill reads back. Current spreadsheet apps mostly warn before running formulas from a CSV. Until decided, the CSV is written exactly as the data is. |
 | A fetched page carries instructions for the AI | The hunt follows them (prompt injection) | NFR-4: page text is data, never instructions. Structured output only. Every kept field is checked against its source. |
 | Provider prices change | Cost estimates go wrong | One price file with a "last checked" date. Show actual cost from provider responses where available. |
 
