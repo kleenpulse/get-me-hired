@@ -105,17 +105,35 @@ function foldWords(text: string): string {
     .trim();
 }
 
-const WORD_CHAR = /[\p{L}\p{N}]/u;
+/** The words of a text, folded. Hyphens, slashes, underscores and punctuation split words. */
+function wordsOf(text: string): string[] {
+  return foldWords(text)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+}
 
-/** True when `text` holds `phrase` as whole words: "fintech" in "Fintech, B2B", not in "fintechs" or "nonfintech". */
+/**
+ * True when `text` holds `phrase` as whole words, however it's spaced: "fintech"
+ * is in "Fintech, B2B" but not in "fintechs"; "e-commerce", "e commerce" and
+ * "ecommerce" all match each other; "AI-dev tools" matches "AI dev tools".
+ *
+ * Both are split into words, and the phrase, joined without spaces, is matched
+ * against runs of whole words in the text, also joined. Words are never cut, so
+ * "tech" doesn't match "biotech", and "ai" doesn't match "maintain".
+ */
 export function mentionsWords(text: string, phrase: string): boolean {
-  const wanted = foldWords(phrase);
-  if (wanted.length < 2) return false;
-  const haystack = foldWords(text);
-  for (let at = haystack.indexOf(wanted); at !== -1; at = haystack.indexOf(wanted, at + 1)) {
-    const before = haystack[at - 1];
-    const after = haystack[at + wanted.length];
-    if ((!before || !WORD_CHAR.test(before)) && (!after || !WORD_CHAR.test(after))) return true;
+  const wanted = wordsOf(phrase);
+  const joined = wanted.join('');
+  if (joined.length < 2) return false;
+  const words = wordsOf(text);
+  for (let start = 0; start < words.length; start++) {
+    let run = '';
+    // A run of up to one word more than the phrase has, so "e commerce" meets "ecommerce" both ways.
+    for (let count = 0; count <= wanted.length && start + count < words.length; count++) {
+      run += words[start + count];
+      if (run === joined) return true;
+      if (run.length >= joined.length) break;
+    }
   }
   return false;
 }
