@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { sameEntry, type BlockEntry } from '@/core/block';
 import { localDate } from '@/core/dates';
 import { waitingSteps, type HuntProgress, type HuntResult, type HuntRunner, type HuntStep } from '@/core/hunt';
@@ -437,11 +438,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { key, before, entry: { status, at: moment.toISOString() } };
       },
 
+      // The update runs at once (flushSync), so the result says whether the inverse
+      // really applied to the lead as it is, never a guess from a moment before.
       undoStatus: (move) => {
-        const now = latest.current.leads.find((lead) => lead.key === move.key);
-        if (!now || !undoStatus(now, move.before, move.entry)) return false;
-        setData((current) => replaceLead(current, move.key, (lead) => undoStatus(lead, move.before, move.entry) ?? lead));
-        return true;
+        let applied = false;
+        flushSync(() =>
+          setData((current) =>
+            replaceLead(current, move.key, (lead) => {
+              const undone = undoStatus(lead, move.before, move.entry);
+              applied = undone !== null;
+              return undone ?? lead;
+            }),
+          ),
+        );
+        return applied;
       },
 
       saveProfile: (profile) => setData((current) => ({ ...current, profile: cleanProfile(profile) })),
