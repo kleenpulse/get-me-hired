@@ -5,6 +5,7 @@
 // the same move. Not now asks for
 // a return date (FR-6.12), and every move can be undone for 10 seconds (FR-6.13).
 
+import { Check } from 'lucide-react';
 import { useCallback, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { addDays } from '@/core/dates';
 import { emailedCount, type Lead, type LeadStatus } from '@/core/lead';
@@ -14,6 +15,7 @@ import { Button, Card, cx, EmptyState, Tag } from '@/components/ui';
 import { INPUT } from '@/components/fields';
 import { UndoToast } from '@/components/UndoToast';
 import { droppedLead, DRAG_TYPE } from '../board-drop';
+import { filterLeads, isFiltering, NO_FILTER, type BoardFilter } from '../board-filter';
 import { roleText } from '../format';
 import { isScrubbed } from '../retention';
 import { Link } from '../router';
@@ -116,16 +118,174 @@ function Tile({
   );
 }
 
+const SELECT = 'min-h-11 cursor-pointer rounded-pill bg-nested px-4 type-label';
+
+function FilterSelect<T extends string>({
+  label,
+  value,
+  options,
+  labels,
+  onChange,
+  disabledHelp = null,
+}: {
+  label: string;
+  value: T;
+  options: readonly T[];
+  labels: Record<T, string>;
+  onChange: (value: T) => void;
+  /** When set, the control is off, and this says why. */
+  disabledHelp?: string | null;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-ink-2 type-caption">
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        disabled={disabledHelp !== null}
+        aria-describedby={disabledHelp ? `${id}-why` : undefined}
+        onChange={(event) => onChange(event.target.value as T)}
+        className={cx(SELECT, 'disabled:cursor-not-allowed disabled:opacity-60')}
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {labels[option]}
+          </option>
+        ))}
+      </select>
+      {disabledHelp && (
+        <p id={`${id}-why`} className="max-w-56 text-ink-2 type-caption">
+          {disabledHelp}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** FR-6.6: search and filter. Every control has a label and works by keyboard. */
+function FilterBar({ shown, total }: { shown: number; total: number }) {
+  const { boardFilter: filter, actions, data } = useApp();
+  const hasFields = (data.profile?.domains ?? []).some((field) => field.trim().length > 1);
+  const f = t.filter;
+  const searchId = useId();
+  const moreId = useId();
+  // On a phone the controls sit behind a button, so the leads aren't a screen away.
+  // They stay open while any of them is set.
+  const wide = useWide();
+  const [more, setMore] = useState(false);
+  const moreSet = filter.type !== 'any' || filter.fields !== 'any' || filter.label !== 'any' || filter.found !== 'any' || filter.statuses !== null;
+  const showMore = wide || more || moreSet;
+  const set = (change: Partial<BoardFilter>) => actions.setBoardFilter({ ...filter, ...change });
+  const toggle = (status: LeadStatus) => {
+    const current = filter.statuses ?? ALL_STATUSES;
+    const next = current.includes(status) ? current.filter((entry) => entry !== status) : [...current, status];
+    set({ statuses: next.length === ALL_STATUSES.length ? null : next });
+  };
+
+  return (
+    <Card aria-labelledby="filter-title" className="flex flex-col gap-4">
+      <h2 id="filter-title" className="sr-only">
+        {f.title}
+      </h2>
+      <div className="flex flex-col gap-1">
+        <label htmlFor={searchId} className="text-ink-2 type-caption">
+          {f.search}
+        </label>
+        <input
+          id={searchId}
+          type="search"
+          value={filter.text}
+          onChange={(event) => set({ text: event.target.value })}
+          aria-describedby={`${searchId}-help`}
+          autoComplete="off"
+          className={cx(INPUT, 'max-w-xl')}
+        />
+        <p id={`${searchId}-help`} className="text-ink-2 type-caption">
+          {f.searchHelp}
+        </p>
+      </div>
+      {!wide && !moreSet && (
+        <div>
+          <Button aria-expanded={more} aria-controls={moreId} onClick={() => setMore(!more)}>
+            {more ? f.fewer : f.more}
+          </Button>
+        </div>
+      )}
+      <div id={moreId} hidden={!showMore} className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-3">
+        <FilterSelect label={f.type} value={filter.type} options={['any', 'post', 'funding', 'community'] as const} labels={f.types} onChange={(type) => set({ type })} />
+        <FilterSelect
+          label={f.fields}
+          value={filter.fields}
+          options={['any', 'out'] as const}
+          labels={f.fieldChoices}
+          onChange={(fields) => set({ fields })}
+          // Without fields in the profile, nothing is ever checked against them.
+          disabledHelp={hasFields ? null : f.fieldsNeedProfile}
+        />
+        <FilterSelect
+          label={f.label}
+          value={filter.label}
+          options={['any', 'published', 'pattern', 'guess', 'none'] as const}
+          labels={f.labels}
+          onChange={(label) => set({ label })}
+        />
+        <FilterSelect label={f.found} value={filter.found} options={['any', '7', '30'] as const} labels={f.foundChoices} onChange={(found) => set({ found })} />
+      </div>
+      <fieldset className="flex flex-col gap-1">
+        <legend className="text-ink-2 type-caption">{f.columns}</legend>
+        <div className="flex flex-wrap gap-2">
+          {ALL_STATUSES.map((status) => {
+            const on = filter.statuses === null || filter.statuses.includes(status);
+            return (
+              <button
+                key={status}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggle(status)}
+                className={cx(
+                  'inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-pill px-4 type-label transition-[background-color,box-shadow] duration-150 ease-dawn',
+                  on ? 'bg-lift elev-lift' : 'bg-nested text-ink-2 hover:brightness-95',
+                )}
+              >
+                {on && <Check size={16} strokeWidth={1.5} aria-hidden />}
+                {strings.statuses[status]}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <p role="status" className="text-ink-2 type-caption tabular">
+          {f.showing(shown, total)}
+        </p>
+        {isFiltering(filter) && <Button onClick={() => actions.setBoardFilter(NO_FILTER)}>{f.clear}</Button>}
+      </div>
+    </Card>
+  );
+}
+
 export function Board() {
-  const { data, today, actions } = useApp();
+  const { data, today, actions, boardFilter } = useApp();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const open = data.leads.find((lead) => lead.key === openKey) ?? null;
 
+  // The filter (FR-6.6) picks the leads, and which status columns show.
+  const shownLeads = filterLeads(data.leads, boardFilter, today);
+  const shownStatuses = boardFilter.statuses;
   const columns = ALL_STATUSES.map((status) => ({
     status,
-    leads: data.leads.filter((lead) => lead.status === status),
-  })).filter((column) => MAIN_STATUSES.includes(column.status) || column.leads.length > 0);
+    leads: shownLeads.filter((lead) => lead.status === status),
+  })).filter(
+    (column) =>
+      (shownStatuses === null || shownStatuses.includes(column.status)) &&
+      (MAIN_STATUSES.includes(column.status) || data.leads.some((lead) => lead.status === column.status)),
+  );
 
   const [lastMove, setLastMove] = useState<{ record: MoveRecord; company: string; status: LeadStatus } | null>(null);
   const [notNowFor, setNotNowFor] = useState<Lead | null>(null);
@@ -141,7 +301,9 @@ export function Board() {
     const record = actions.setStatus(lead.key, status, snoozeUntil ? { snoozeUntil } : undefined);
     if (!record) return;
     setLastMove({ record, company: lead.company, status });
-    setAnnouncement(`${t.moved(lead.company, strings.statuses[status])} ${t.changeBack}`);
+    // A move into a column the filter hides still says where the lead went, and Undo works.
+    const hidden = boardFilter.statuses !== null && !boardFilter.statuses.includes(status);
+    setAnnouncement([t.moved(lead.company, strings.statuses[status]), hidden ? t.filter.hiddenColumn : '', t.changeBack].filter(Boolean).join(' '));
   };
 
   const move = (lead: Lead, status: LeadStatus) => {
@@ -191,6 +353,8 @@ export function Board() {
           }
         />
       ) : (
+        <>
+        <FilterBar shown={shownLeads.length} total={data.leads.length} />
         <div className="flex flex-col gap-gutter md:flex-row md:items-start md:overflow-x-auto md:pb-2">
           {columns.map(({ status, leads }) => (
             <Card
@@ -245,6 +409,7 @@ export function Board() {
             </Card>
           ))}
         </div>
+        </>
       )}
 
       {open && <LeadPanel key={open.key} lead={open} onClose={() => setOpenKey(null)} />}

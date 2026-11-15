@@ -95,6 +95,31 @@ function mentions(text: string, item: string): boolean {
   return item.trim().length > 1 && text.toLowerCase().includes(item.trim().toLowerCase());
 }
 
+/** Lower case, accents off, one space between words. */
+function foldWords(text: string): string {
+  return text
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/** True when `text` holds `phrase` as whole words: "fintech" in "Fintech, B2B", not in "fintechs" or "nonfintech". */
+export function mentionsWords(text: string, phrase: string): boolean {
+  const wanted = foldWords(phrase);
+  if (wanted.length < 2) return false;
+  const haystack = foldWords(text);
+  for (let at = haystack.indexOf(wanted); at !== -1; at = haystack.indexOf(wanted, at + 1)) {
+    const before = haystack[at - 1];
+    const after = haystack[at + wanted.length];
+    if ((!before || !WORD_CHAR.test(before)) && (!after || !WORD_CHAR.test(after))) return true;
+  }
+  return false;
+}
+
 /** A link in the comment whose host carries the company's name, or nothing. */
 function companyUrlFrom(text: string, company: string): string {
   const name = company.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -163,6 +188,10 @@ export function judge(verdict: Verdict, comment: HnComment, profile: Profile, no
 
   const pay = isQuoted(verdict.pay, text) ? verdict.pay : '';
   const signals: Signal[] = pay ? [] : ['pay-unknown'];
+  // FRD §9.2 "outside-domains", checked in code: the profile names fields, and the comment
+  // mentions none of them as whole words. With no fields in the profile, nothing is checked.
+  const fields = profile.domains.filter((field) => field.trim().length > 1);
+  if (fields.length > 0 && !fields.some((field) => mentionsWords(text, field))) signals.push('outside-domains');
   const hook = verdict.hook && isQuoted(verdict.hook, text) ? oneLine(verdict.hook, 200) : '';
 
   const base = {
