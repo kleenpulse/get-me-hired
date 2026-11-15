@@ -1,4 +1,4 @@
-import { TriangleAlert } from 'lucide-react';
+import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { MotionConfig } from 'motion/react';
 import { lazy, Suspense, useEffect } from 'react';
 import { ScreenBoundary } from '@/components/ScreenBoundary';
@@ -65,7 +65,7 @@ function LoadFailed({ reason }: { reason: 'broken' | 'newer' | 'blocked' }) {
 }
 
 export function App() {
-  const { ready, data, saveFailed, loadFailed, savingOff } = useApp();
+  const { ready, data, saveFailed, loadFailed, savingOff, changedElsewhere, reloads, actions } = useApp();
   const route = useRoute();
   const welcomed = data.settings.welcomeDone;
 
@@ -97,7 +97,19 @@ export function App() {
               </Banner>
             </div>
           )}
-          {route === 'today' && <Today />}
+          {/* A save here was refused because another tab saved first (storage.ts). */}
+          {changedElsewhere && (
+            <div role="status" className="mb-gutter">
+              <Banner
+                icon={RefreshCw}
+                action={<Button onClick={actions.dismissChangedElsewhere}>{strings.errors.dismiss}</Button>}
+              >
+                {strings.errors.changedElsewhere}
+              </Banner>
+            </div>
+          )}
+          {/* A screen starts over when another tab's data is read in, so no form keeps an old value. */}
+          {route === 'today' && <Today key={reloads} />}
           <ScreenBoundary resetKey={route}>
             <Suspense
               fallback={
@@ -106,11 +118,11 @@ export function App() {
                 </p>
               }
             >
-              {route === 'board' && <Board />}
-              {route === 'history' && <History />}
-              {route === 'profile' && <Profile />}
-              {route === 'data' && <Data />}
-              {route === 'settings' && <Settings />}
+              {route === 'board' && <Board key={reloads} />}
+              {route === 'history' && <History key={reloads} />}
+              {route === 'profile' && <Profile key={reloads} />}
+              {route === 'data' && <Data key={reloads} />}
+              {route === 'settings' && <Settings key={reloads} />}
             </Suspense>
           </ScreenBoundary>
         </Shell>

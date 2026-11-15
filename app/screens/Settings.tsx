@@ -433,6 +433,19 @@ function DayCard() {
         }}
       />
 
+      {/* FR-4.2: it saves at once, and starts nothing until the app is next opened. */}
+      <div className="flex flex-col gap-1.5">
+        <ChoicePills
+          label={d.runOnOpen}
+          name="run-on-open"
+          options={['off', 'on'] as const}
+          labels={d.runOnOpenChoices}
+          value={settings.runOnOpen ? 'on' : 'off'}
+          onChange={(value) => actions.updateSettings({ runOnOpen: value === 'on' })}
+        />
+        <p className="max-w-[68ch] text-ink-2 type-caption">{d.runOnOpenHelp}</p>
+      </div>
+
       <form
         className="flex flex-col gap-4"
         onSubmit={(event) => {

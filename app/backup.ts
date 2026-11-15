@@ -70,7 +70,7 @@ interface RunExtras {
 interface Extras {
   format_version: number;
   app_version: string;
-  settings: { daily_target: number; cadence: Cadence; monthly_cap: number };
+  settings: { daily_target: number; cadence: Cadence; monthly_cap: number; run_on_open: boolean };
   leads: Record<string, LeadExtras>;
   runs: RunExtras[];
   do_not_contact: string[];
@@ -86,7 +86,7 @@ export function backupFiles(data: AppData): ZipFile[] {
   const extras: Extras = {
     format_version: FORMAT_VERSION,
     app_version: APP_VERSION,
-    settings: { daily_target: data.settings.dailyTarget, cadence: data.settings.cadence, monthly_cap: data.settings.monthlyCap },
+    settings: { daily_target: data.settings.dailyTarget, cadence: data.settings.cadence, monthly_cap: data.settings.monthlyCap, run_on_open: data.settings.runOnOpen },
     leads: Object.fromEntries(
       leads.map((lead) => [
         lead.key,
@@ -145,7 +145,7 @@ export interface Incoming {
   profile: Profile | null;
   leads: Lead[];
   runs: RunRecord[];
-  settings: { dailyTarget: number; cadence: Cadence; monthlyCap?: number } | null;
+  settings: { dailyTarget: number; cadence: Cadence; monthlyCap?: number; runOnOpen?: boolean } | null;
   /** Rows the lenient reader marked "Needs review". */
   needsReview: number;
   /** The backup's do-not-contact list, each line checked (FR-5.7). */
@@ -272,6 +272,8 @@ function readSettings(value: unknown): Incoming['settings'] {
     cadence: { followupDelays: [...value.cadence.followupDelays], closeAfter: value.cadence.closeAfter },
     // Older backups have no cap, and one outside 1 to 500 dollars is ignored: the cap set here stays.
     ...(isValidMonthlyCap(value.monthly_cap) ? { monthlyCap: value.monthly_cap } : {}),
+    // Only a real true or false. Anything else leaves the setting here as it is.
+    ...(typeof value.run_on_open === 'boolean' ? { runOnOpen: value.run_on_open } : {}),
   };
 }
 

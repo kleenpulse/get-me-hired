@@ -48,8 +48,11 @@ import {
 import type { Incoming, MergeSummary } from './backup';
 import { downloadBlob } from './download';
 import { deletePerson } from './erase';
-import { capAllowsStart, capState } from './cap';
+import { capAllowsStart, capState, type CapState } from './cap';
 import { addFound, applyBlocks } from './found';
+import { browserLocks, withHuntLock } from './hunt-lock';
+import { shouldRunOnOpen } from './run-on-open';
+import { TabSync } from './tab-sync';
 import { usd } from './format';
 import { strings } from './strings';
 
@@ -84,7 +87,7 @@ interface Actions {
   /** Runs the app in memory only, after the browser refused to store data. */
   continueWithoutSaving: () => void;
   /** Changes settings that save as they're made: the daily target, the cadence, the display (FR-10.2, FR-10.5). */
-  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display' | 'monthlyCap'>>) => void;
+  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display' | 'monthlyCap' | 'runOnOpen'>>) => void;
   /**
    * Adds entries to the do-not-contact list (FR-5.7) and applies them to saved
    * leads at once: leads on a blocked domain are removed, and blocked people and
@@ -107,6 +110,8 @@ interface Actions {
   /** Deletes a key from storage at once (AC-10.1). Rejects if storage fails. */
   removeKey: (provider: ProviderId) => Promise<void>;
   deleteEverything: () => Promise<void>;
+  /** Hides the note that another tab changed the data. */
+  dismissChangedElsewhere: () => void;
 }
 
 /** What Undo needs about one move (FR-6.13). */
@@ -132,6 +137,10 @@ export interface AppState {
   loadFailed: false | 'broken' | 'newer' | 'blocked';
   /** True when the user chose to go on in a browser that won't store data. Nothing is saved. */
   savingOff: boolean;
+  /** True after a save here was refused because another tab saved first, and the latest was read. */
+  changedElsewhere: boolean;
+  /** Counts the times another tab's saved data was read in. Screens use it as a key, so their forms start over. */
+  reloads: number;
   /**
    * The providers that have a key saved. The keys themselves stay inside the
    * provider component, so no screen can show or log one by accident.
@@ -229,6 +238,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // The newest data, for code that runs outside a render (a hunt finishing).
   const latest = useRef(data);
   latest.current = data;
+  // Tells the other tabs of this app that the saved data changed.
+  const channel = useRef<BroadcastChannel | null>(null);
+  const [changedElsewhere, setChangedElsewhere] = useState(false);
+  const [reloads, setReloads] = useState(0);
+
+  // Keeps this tab in step with the others: ordered writes over the right revision, and
+  // never a copy built before another tab's data was read in (tab-sync.ts).
+  const sync = useRef<TabSync | null>(null);
+  if (!sync.current) {
+    sync.current = new TabSync(
+      { load: loadData, save: saveData },
+      {
+        replace: (next) => {
+          loaded.current = next;
+          setData(next);
+          setReloads((count) => count + 1);
+        },
+        dropped: () => setChangedElsewhere(true),
+      },
+    );
+  }
+  const tabSync = sync.current;
+
+  /** Reads the saved data and keys again, after another tab changed them. */
+  const readAgain = useCallback(async () => {
+    await tabSync.reload();
+    const stored = await loadKeys();
+    keys.current = stored;
+    setKeyProviders(providersWithKeys(stored));
+  }, [tabSync]);
+
+  /** Writes the data, and tells the other tabs. A copy another tab made stale is never written. */
+  const write = useCallback(
+    async (next: AppData): Promise<void> => {
+      const outcome = await tabSync.write(next);
+      if (outcome === 'saved') {
+        setSaveFailed(false);
+        channel.current?.postMessage('saved');
+      } else if (outcome === 'failed') setSaveFailed(true);
+    },
+    [tabSync],
+  );
 
   // Read the saved data once.
   useEffect(() => {
@@ -236,9 +287,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadData()
       .then((saved) => {
         if (!active) return;
-        if (saved) {
-          loaded.current = saved;
-          setData(saved);
+        const first = tabSync.start(saved);
+        if (first) {
+          loaded.current = first;
+          setData(first);
         }
         // Keys are read only once the data opened, so a broken store shows one error, not two.
         return loadKeys().then((stored) => {
@@ -267,15 +319,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!ready || loadFailed || savingOff || data === loaded.current) return;
     loaded.current = data;
-    saveData(data).then(
-      () => setSaveFailed(false),
-      () => setSaveFailed(true),
-    );
+    void write(data);
     if (!askedToPersist.current) {
       askedToPersist.current = true;
       requestPersistence().then(setPersistence, () => setPersistence('unsupported'));
     }
-  }, [data, ready, loadFailed, savingOff]);
+  }, [data, ready, loadFailed, savingOff, write]);
+
+  // Other tabs: read the data again when one of them saves, and when this tab is shown
+  // again, in case a message was missed. Changes save as they're made, so there's no
+  // unsaved work here to lose by reading again.
+  useEffect(() => {
+    if (!ready || loadFailed || savingOff) return;
+    const again = () => void readAgain().catch(() => {});
+    const onShow = () => document.visibilityState === 'visible' && again();
+    document.addEventListener('visibilitychange', onShow);
+    const tabs = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('get-me-hired');
+    if (tabs) tabs.onmessage = again;
+    channel.current = tabs;
+    return () => {
+      document.removeEventListener('visibilitychange', onShow);
+      tabs?.close();
+      channel.current = null;
+    };
+  }, [ready, loadFailed, savingOff, readAgain]);
 
   // Keep the clock moving, so ages and "today" stay right while the tab is open.
   useEffect(() => {
@@ -318,7 +385,115 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Stop a running hunt if the app goes away.
   useEffect(() => () => huntControl.current?.abort(), []);
 
-  const runHunt = useCallback(() => {
+  // True while changes are saved (see the save effect), for code that runs outside a render.
+  const canSave = useRef(false);
+  canSave.current = ready && !loadFailed && !savingOff;
+
+  /**
+   * Applies a change at once and writes it to storage, resolving when it's written. A
+   * hunt holds the cross-tab lock until its run is saved, so another tab that takes the
+   * lock next reads it (hunt-lock.ts).
+   */
+  const commit = useCallback((change: (current: AppData) => AppData): Promise<void> => {
+    const next: { data: AppData | null } = { data: null };
+    flushSync(() =>
+      setData((current) => {
+        next.data = change(current);
+        return next.data;
+      }),
+    );
+    if (!canSave.current || !next.data) return Promise.resolve();
+    // Written here, so the lock is held until it lands. The save effect then has nothing to do.
+    loaded.current = next.data;
+    return write(next.data);
+  }, [write]);
+
+  /** One hunt, from loading the runner to saving what it found. Resolves once its run is written. */
+  const huntWith = useCallback(
+    (
+      control: AbortController,
+      sample: boolean,
+      provider: ProviderId | null,
+      key: string | undefined,
+      profile: Profile | null,
+      leads: readonly Lead[],
+      cap: CapState | null,
+    ): Promise<void> => {
+      // The real hunt and the AI SDK load only now, so the first page load doesn't pay for them.
+      const runner: Promise<HuntRunner> =
+        sample || !provider || !key || !profile
+          ? Promise.resolve(createSampleHunt(pause))
+          : import('@/core/real-hunt').then(({ createRealHunt }) =>
+              createRealHunt({
+                provider,
+                key,
+                profile,
+                fetch: window.fetch.bind(window),
+                knownKeys: new Set(leads.map((lead) => lead.key)),
+                blockList: latest.current.doNotContact,
+                // Off for now: Gemini's page reader can't see links, so no round can be confirmed
+                // at its own article (AC-4.6), and the stage would spend a minute to keep nothing.
+                // It comes back on with a page reader that returns links (Firecrawl, FR-2.3). FRD §19.
+                sources: { funding: false },
+                // Checked before every model call. A free model has no cap to reach.
+                ...(cap && cap.kind === 'ok' ? { cap: { usd: cap.cap, spentUsd: cap.spent.usd } } : {}),
+              }),
+            );
+
+      return runner
+        .then((run) =>
+          run({
+            now: new Date(),
+            signal: control.signal,
+            onProgress: (progress) => setHunt((current) => ({ ...current, progress })),
+          }),
+        )
+        .then((result) => {
+          const finishedAt = new Date();
+          const known = new Set(latest.current.leads.map((lead) => lead.key));
+          const added = result.leads.filter((lead) => !known.has(lead.key)).length;
+          const saved = commit((current) => addFound(current, result, finishedAt, sample, provider));
+          setHunt((current) => ({
+            ...current,
+            running: false,
+            progress: { steps: result.steps, kept: result.leads.length, dropped: result.dropped.length },
+            message: huntMessage(result, added, provider, latest.current, localDate(finishedAt)),
+            failed: result.status === 'failed',
+          }));
+          return saved;
+        })
+        .catch((error: unknown) => {
+          // The hunt couldn't even load (offline, say). It still gets a run and a report (AC-8.1).
+          const problem = classifyProviderError(error);
+          // The same rule as real-hunt.ts: search steps and switched-off stages say so, the rest failed.
+          const steps = waitingSteps().map((step): HuntStep =>
+            step.id === 'posts' || step.id === 'freshness'
+              ? { ...step, state: 'skipped', skipReason: 'needs-search' }
+              : step.id === 'funding'
+                ? { ...step, state: 'skipped', skipReason: 'switched-off' }
+                : { ...step, state: 'failed' },
+          );
+          const saved = commit((current) => addFound(current, { status: 'failed', problem, leads: [], dropped: [], steps }, new Date(), sample, provider));
+          setHunt((current) => ({
+            ...current,
+            running: false,
+            failed: true,
+            message: strings.hunt.failed(problem, providerName(provider), 0),
+          }));
+          return saved;
+        })
+        .finally(() => {
+          huntControl.current = null;
+        });
+    },
+    [],
+  );
+
+  /**
+   * Starts a hunt. `auto` is run on open (FR-4.2): it starts only with the hunt lock, and
+   * only when the saved data, read again inside the lock, shows no real hunt today.
+   */
+  const startHunt = useCallback((auto: boolean) => {
     // A second click while a hunt runs does nothing (AC-4.1).
     if (huntControl.current) return;
     const { settings, profile, leads } = latest.current;
@@ -332,75 +507,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cap = !sample && provider ? capState(latest.current, provider, today) : null;
     if (cap && !capAllowsStart(cap)) return;
 
+    // Taken now, so a second click while the lock is asked for does nothing either.
     const control = new AbortController();
     huntControl.current = control;
-    setHunt({ running: true, sample, progress: null, message: null });
+    const giveUp = (message: string | null) => {
+      if (huntControl.current === control) huntControl.current = null;
+      if (message) setHunt({ ...IDLE_HUNT, message });
+    };
 
-    // The real hunt and the AI SDK load only now, so the first page load doesn't pay for them.
-    const runner: Promise<HuntRunner> =
-      sample || !provider || !key || !profile
-        ? Promise.resolve(createSampleHunt(pause))
-        : import('@/core/real-hunt').then(({ createRealHunt }) =>
-            createRealHunt({
-              provider,
-              key,
-              profile,
-              fetch: window.fetch.bind(window),
-              knownKeys: new Set(leads.map((lead) => lead.key)),
-              blockList: latest.current.doNotContact,
-              // Off for now: Gemini's page reader can't see links, so no round can be confirmed
-              // at its own article (AC-4.6), and the stage would spend a minute to keep nothing.
-              // It comes back on with a page reader that returns links (Firecrawl, FR-2.3). FRD §19.
-              sources: { funding: false },
-              // Checked before every model call. A free model has no cap to reach.
-              ...(cap && cap.kind === 'ok' ? { cap: { usd: cap.cap, spentUsd: cap.spent.usd } } : {}),
-            }),
-          );
+    const hunt = (): Promise<void> => {
+      setHunt({ running: true, sample, progress: null, message: null });
+      return huntWith(control, sample, provider, key, profile, leads, cap);
+    };
 
-    runner
-      .then((run) =>
-        run({
-          now: new Date(),
-          signal: control.signal,
-          onProgress: (progress) => setHunt((current) => ({ ...current, progress })),
-        }),
-      )
-      .then((result) => {
-        const finishedAt = new Date();
-        const known = new Set(latest.current.leads.map((lead) => lead.key));
-        const added = result.leads.filter((lead) => !known.has(lead.key)).length;
-        setData((current) => addFound(current, result, finishedAt, sample, provider));
-        setHunt((current) => ({
-          ...current,
-          running: false,
-          progress: { steps: result.steps, kept: result.leads.length, dropped: result.dropped.length },
-          message: huntMessage(result, added, provider, latest.current, localDate(finishedAt)),
-          failed: result.status === 'failed',
-        }));
-      })
-      .catch((error: unknown) => {
-        // The hunt couldn't even load (offline, say). It still gets a run and a report (AC-8.1).
-        const problem = classifyProviderError(error);
-        // The same rule as real-hunt.ts: search steps and switched-off stages say so, the rest failed.
-        const steps = waitingSteps().map((step): HuntStep =>
-          step.id === 'posts' || step.id === 'freshness'
-            ? { ...step, state: 'skipped', skipReason: 'needs-search' }
-            : step.id === 'funding'
-              ? { ...step, state: 'skipped', skipReason: 'switched-off' }
-              : { ...step, state: 'failed' },
-        );
-        setData((current) => addFound(current, { status: 'failed', problem, leads: [], dropped: [], steps }, new Date(), sample, provider));
-        setHunt((current) => ({
-          ...current,
-          running: false,
-          failed: true,
-          message: strings.hunt.failed(problem, providerName(provider), 0),
-        }));
-      })
-      .finally(() => {
-        huntControl.current = null;
-      });
+    // One hunt at a time across tabs (hunt-lock.ts). Without the Web Locks API a click still
+    // hunts, as before, but nothing starts on its own.
+    const locks = browserLocks();
+    if (!locks) {
+      if (auto) giveUp(null);
+      else void hunt();
+      return;
+    }
+    withHuntLock(locks, async () => {
+      if (control.signal.aborted) return giveUp(null);
+      if (auto) {
+        // Another tab may have hunted since this one loaded: ask the saved data, not this tab's copy.
+        const fresh = await loadData().catch(() => null);
+        if (!fresh || !shouldRunOnOpen(fresh, providersWithKeys(keys.current), localDate(new Date()))) return giveUp(null);
+      }
+      await hunt();
+    }).then(
+      (outcome) => outcome === 'busy' && giveUp(strings.hunt.otherTab),
+      () => giveUp(null),
+    );
   }, []);
+
+  // Run on open (FR-4.2): once per page load, after the saved data and keys are read.
+  // Turning the setting on later doesn't start a hunt until the next open.
+  const openChecked = useRef(false);
+  useEffect(() => {
+    if (!ready || openChecked.current) return;
+    openChecked.current = true;
+    if (loadFailed || savingOff) return;
+    const go = () => {
+      if (shouldRunOnOpen(latest.current, keyProviders, localDate(new Date()))) startHunt(true);
+    };
+    // A page the browser loads ahead of a visit (prerendering) waits until it's really opened.
+    const page = document as Document & { prerendering?: boolean };
+    if (page.prerendering) document.addEventListener('prerenderingchange', go, { once: true });
+    else go();
+  }, [ready, loadFailed, savingOff, keyProviders, startHunt]);
 
   // Closing the tab during a real hunt asks first (FRD §10.2). A sample hunt loses nothing.
   useEffect(() => {
@@ -444,7 +600,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }));
       },
 
-      runHunt,
+      runHunt: () => startHunt(false),
       cancelHunt: () => huntControl.current?.abort(),
 
       markEmailed: (key, personIndex) =>
@@ -528,7 +684,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       saveKey: async (provider, key) => {
         const next = { ...keys.current, [provider]: key.trim() };
-        if (!savingOffRef.current) await saveKeys(next);
+        if (!savingOffRef.current) {
+          await tabSync.run(() => saveKeys(next));
+          channel.current?.postMessage('saved');
+        }
         keys.current = next;
         setKeyProviders(providersWithKeys(next));
         setData((current) => ({ ...current, settings: { ...current.settings, provider } }));
@@ -537,7 +696,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       removeKey: async (provider) => {
         const next = { ...keys.current };
         delete next[provider];
-        if (!savingOffRef.current) await saveKeys(next);
+        if (!savingOffRef.current) {
+          await tabSync.run(() => saveKeys(next));
+          channel.current?.postMessage('saved');
+        }
         keys.current = next;
         const left = providersWithKeys(next);
         setKeyProviders(left);
@@ -549,11 +711,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
       },
 
+      dismissChangedElsewhere: () => setChangedElsewhere(false),
+
       deleteEverything: async () => {
         huntControl.current?.abort();
         // With saving off there is nothing stored, and storage would refuse the request anyway.
-        if (!savingOffRef.current) await clearData();
-        const fresh = emptyData();
+        if (!savingOffRef.current) {
+          await tabSync.clear(clearData);
+          // The other tabs read again, find nothing, and start over too.
+          channel.current?.postMessage('saved');
+        }
+        const fresh = tabSync.stamp(emptyData());
         // The theme and text size copy goes too: Delete everything wipes all app data (FR-9.5).
         clearDisplayCopy();
         // With saving off, the welcome screens stay skipped: their last step says data is saved.
@@ -565,11 +733,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setData(fresh);
       },
     };
-  }, [runHunt]);
+  }, [startHunt, tabSync]);
 
   const state = useMemo<AppState>(
-    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, keyProviders, hunt, actions }),
-    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, keyProviders, hunt, actions],
+    () => ({ ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, reloads, keyProviders, hunt, actions }),
+    [ready, data, now, today, persistence, saveFailed, loadFailed, savingOff, changedElsewhere, reloads, keyProviders, hunt, actions],
   );
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
