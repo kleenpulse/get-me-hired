@@ -87,8 +87,16 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
     try {
       sdk = await loadSdk();
       model = await loadModel(settings.provider, settings.key, settings.fetch);
-    } catch {
-      return finish('failed', 'unknown');
+    } catch (error) {
+      // Nothing could run, so no step is left "waiting" beside the failure (a failed
+      // download of the SDK while offline reads as no connection). A stage that is
+      // switched off says so, as in the stage loop below: it didn't fail, it wasn't run.
+      const on = { funding: settings.sources?.funding !== false, community: settings.sources?.community !== false };
+      for (const id of ['funding', 'community'] as const) {
+        set(id, on[id] ? { state: 'failed' } : { state: 'skipped', skipReason: 'switched-off' });
+      }
+      set('contacts', { state: 'failed' });
+      return finish('failed', classifyProviderError(error));
     }
 
     const context: StageContext = {
