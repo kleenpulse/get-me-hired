@@ -70,3 +70,12 @@ export function browserName(userAgent: string): string {
   if (/Safari\//.test(userAgent)) return names.safari;
   return names.other;
 }
+
+/**
+ * The role, in words. An empty role means "we don't know" (AC-6.2), except on a
+ * funding lead that lists no opening, where "No open role listed" is the fact.
+ */
+export function roleText(lead: Pick<Lead, 'role' | 'type' | 'signals'>): string {
+  if (lead.role) return lead.role;
+  return lead.type === 'funding' && lead.signals.includes('no-open-role') ? strings.lead.facts.noRole : strings.unknown;
+}

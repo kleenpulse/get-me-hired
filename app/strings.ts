@@ -190,8 +190,9 @@ export const strings = {
     runSampleHunt: 'Run a sample hunt',
     huntNeedsProfile: (fields: readonly RequiredField[]) =>
       `Before a hunt can run, add ${missingWords(fields)} to your profile.`,
-    huntNeedsKey:
-      'Real hunts are not built yet in this early version. You can run a sample hunt to see how it works.',
+    huntNeedsKey: 'To run a real hunt, add an AI key in Settings. Or run a sample hunt to see how it works.',
+    huntReady:
+      'This version reads the Hacker News hiring thread and checks each opening against your profile. Fresh posts and funding news come later.',
     sampleHuntNote: 'A sample hunt searches nothing and sends nothing to any service.',
     leftOut: (count: number) =>
       `${plural(count, 'more lead is', 'more leads are')} waiting. They will show once you get through today's list.`,
@@ -204,8 +205,18 @@ export const strings = {
       },
       first: {
         title: 'Nothing here yet',
-        body: 'This early version cannot run a real hunt yet. You can look around with sample leads. They are invented, and they are always labelled.',
+        body: 'Add an AI key in Settings to run your first hunt. Or look around with sample leads: they are invented, and always labelled.',
         action: 'Try with sample data',
+        settings: 'Add a key',
+      },
+      nothingYet: {
+        title: 'No leads yet',
+        body: 'The hunt found nothing that fits your profile. Try adding more roles or skills, or run it again tomorrow: the thread grows every day.',
+        action: 'Edit profile',
+      },
+      readyToHunt: {
+        title: 'Run your first hunt',
+        body: 'Press "Run today\'s hunt". It reads the Hacker News hiring thread and keeps the openings that fit your profile.',
       },
       sampleReady: {
         title: 'Run your first sample hunt',
@@ -237,12 +248,33 @@ export const strings = {
       contacts: 'Finding people and how to reach them',
     } satisfies Record<HuntStepId, string>,
     stepCount: (count: number) => `${count} checked`,
-    stepStates: { waiting: 'Waiting', running: 'Running now', done: 'Done', failed: 'Failed' },
+    stepStates: { waiting: 'Waiting', running: 'Running now', done: 'Done', failed: 'Failed', skipped: 'Skipped' },
+    skipReasons: {
+      'needs-search': 'Needs web search',
+      'not-built': 'Not built yet',
+    },
     tally: (kept: number, dropped: number) => `Kept ${kept} · Dropped ${dropped}`,
     cancel: 'Cancel',
     finished: (kept: number) => `Hunt finished. ${plural(kept, 'new lead', 'new leads')} added.`,
     cancelled: (kept: number) => `Hunt cancelled. ${plural(kept, 'lead', 'leads')} found so far were kept.`,
     nothingNew: 'Hunt finished. Nothing new today.',
+    yourProvider: 'your AI provider',
+    unread: (count: number) => `We couldn't read ${plural(count, 'opening', 'openings')}. Run the hunt again later to try them.`,
+    failed: (problem: KeyProblem | 'hn-down', provider: string, kept: number) => {
+      const why =
+        problem === 'hn-down'
+          ? "Hacker News isn't answering right now. Try again later."
+          : problem === 'rate-limited'
+            ? `${provider} asked us to slow down. Try again in a few minutes.`
+            : problem === 'wrong-key'
+              ? `This key didn't work with ${provider}. Check it in Settings.`
+              : problem === 'no-credit'
+                ? `Your ${provider} account is out of credit.`
+                : problem === 'no-connection'
+                  ? `We couldn't reach ${provider}. Check your internet connection.`
+                  : `Something went wrong with ${provider}. Try again.`;
+      return kept > 0 ? `The hunt stopped. ${why} ${plural(kept, 'lead', 'leads')} found before it stopped were kept.` : `The hunt stopped. ${why}`;
+    },
   },
 
   lead: {

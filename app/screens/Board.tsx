@@ -8,6 +8,7 @@ import { emailedCount, type Lead, type LeadStatus } from '@/core/lead';
 import { LeadPanel } from '@/components/LeadPanel';
 import { TierChip } from '@/components/lead-parts';
 import { Card, EmptyState, Tag } from '@/components/ui';
+import { roleText } from '../format';
 import { Link } from '../router';
 import { useApp } from '../state';
 import { strings } from '../strings';
@@ -33,7 +34,7 @@ function Tile({ lead, onOpen, onMove }: { lead: Lead; onOpen: () => void; onMove
           >
             {lead.company}
           </button>
-          <span className="text-ink-2 type-caption">{lead.role || strings.lead.facts.noRole}</span>
+          <span className="text-ink-2 type-caption">{roleText(lead)}</span>
         </div>
         <TierChip tier={lead.tier} />
       </div>

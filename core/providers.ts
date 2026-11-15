@@ -198,7 +198,8 @@ export async function loadSdk(): Promise<typeof import('ai')> {
   return import('ai');
 }
 
-async function loadModel(id: ProviderId, apiKey: string, fetch: typeof globalThis.fetch) {
+/** The model for a provider and key. Loads only that provider's package. */
+export async function loadModel(id: ProviderId, apiKey: string, fetch: typeof globalThis.fetch) {
   const model = PROVIDERS[id].model;
   switch (id) {
     case 'gemini': {
