@@ -3,6 +3,8 @@ import { personEntry } from '@/core/block';
 import type { HuntResult } from '@/core/hunt';
 import type { Lead } from '@/core/lead';
 import { emptyData, type AppData } from './data';
+import { spentThisMonth } from '@/core/budget';
+import { capState } from './cap';
 import { addFound, applyBlocks } from './found';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
@@ -87,5 +89,46 @@ describe('blocking saved leads', () => {
     expect(removed).toBe(1);
     expect(after.leads).toEqual([]);
     expect(applyBlocks(after, [entry]).data.doNotContact).toHaveLength(1);
+  });
+});
+
+describe("a run's cost, for the monthly cap (AC-4.13)", () => {
+  const usage = { calls: 2, inputTokens: 1_000_000, outputTokens: 0, unreported: 1 };
+
+  it('is saved at the list price, with the calls that reported nothing', () => {
+    const run = addFound(emptyData(), { ...RESULT, usage }, NOW, false, 'gemini').runs[0];
+    // 1,000,000 tokens in at $0.25 a million.
+    expect(run?.listCost).toBeCloseTo(0.25);
+    expect(run?.unreported).toBe(1);
+  });
+
+  it("is the hunt's own figure, which counts unreported calls at their bound, never $0", () => {
+    const unreported = { calls: 1, inputTokens: 0, outputTokens: 0, unreported: 1 };
+    const run = addFound(emptyData(), { ...RESULT, usage: unreported, chargedUsd: 0.012 }, NOW, false, 'gemini').runs[0];
+    expect(run?.listCost).toBe(0.012);
+    expect(run?.unreported).toBe(1);
+  });
+
+  it('adds up across runs, so hunts that never report usage still reach the cap', () => {
+    const unreported = { calls: 1, inputTokens: 0, outputTokens: 0, unreported: 1 };
+    let data: AppData = { ...emptyData(), settings: { ...emptyData().settings, monthlyCap: 2 } };
+    expect(capState(data, 'gemini', '2026-11-15').kind).toBe('ok');
+    data = addFound(data, { ...RESULT, leads: [], usage: unreported, chargedUsd: 1 }, NOW, false, 'gemini');
+    data = addFound(data, { ...RESULT, leads: [], usage: unreported, chargedUsd: 1 }, NOW, false, 'gemini');
+    expect(spentThisMonth(data.runs, '2026-11-15')).toEqual({ usd: 2, partial: true });
+    expect(capState(data, 'gemini', '2026-11-15').kind).toBe('cap-reached');
+  });
+
+  it('is nothing for a sample hunt, and for a free model', () => {
+    expect(addFound(emptyData(), { ...RESULT, usage }, NOW, true, null).runs[0]?.listCost).toBe(0);
+    expect(addFound(emptyData(), { ...RESULT, usage }, NOW, false, 'openrouter').runs[0]?.listCost).toBe(0);
+  });
+
+  it('names the cap in the report of a hunt that stopped at it, and says the total may be higher', () => {
+    const data: AppData = { ...emptyData(), settings: { ...emptyData().settings, monthlyCap: 3 } };
+    const stopped: HuntResult = { ...RESULT, status: 'failed', problem: 'cap-reached', usage };
+    const report = addFound(data, stopped, NOW, false, 'gemini').runs[0]?.report ?? '';
+    expect(report).toContain("You've reached this month's cap of $3.");
+    expect(report).toContain('the real total may be higher');
   });
 });

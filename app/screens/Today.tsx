@@ -21,7 +21,8 @@ import { missingFields } from '@/core/profile';
 import { buildToday, type TodayGroup } from '@/core/ranking';
 import { LeadCard } from '@/components/LeadCard';
 import { Banner, Button, Card, cx, EmptyState, StatusPill, type Icon } from '@/components/ui';
-import { clockTime } from '../format';
+import { capAllowsStart, capState, type CapState } from '../cap';
+import { clockTime, usd } from '../format';
 import { Link } from '../router';
 import { useApp, type HuntState } from '../state';
 import { strings } from '../strings';
@@ -151,6 +152,22 @@ function HuntCard({ hunt, onCancel }: { hunt: HuntState; onCancel: () => void })
   );
 }
 
+/** The line under the hunt button about cost and the monthly cap. */
+function capNote(cap: CapState): string {
+  switch (cap.kind) {
+    case 'free':
+      return t.huntCostFree;
+    case 'no-price':
+      return t.noPrice;
+    case 'cap-reached':
+      return t.capReached(usd(cap.cap));
+    case 'over-cap':
+      return t.overCap(usd(cap.cap));
+    case 'ok':
+      return t.huntCost(usd(cap.estimate), usd(cap.spent.usd), usd(cap.cap));
+  }
+}
+
 export function Today() {
   const { data, today, now, hunt, keyProviders, actions } = useApp();
   const [filter, setFilter] = useState<Filter>('all');
@@ -178,6 +195,9 @@ export function Today() {
   const hasKey = provider !== null && keyProviders.includes(provider);
   // A real hunt needs a complete profile and a saved key (FR-3.6). A sample hunt needs neither.
   const canHunt = sampleMode || (missing.length === 0 && hasKey);
+  // The estimate before every real hunt, and the monthly cap (FR-4.13, AC-4.13).
+  const cap = !sampleMode && provider && hasKey && missing.length === 0 ? capState(data, provider, today) : null;
+  const capOk = cap === null || capAllowsStart(cap);
 
   const empty =
     list.entries.length > 0
@@ -232,9 +252,9 @@ export function Today() {
           <Button
             variant="primary"
             icon={sampleMode ? FlaskConical : undefined}
-            disabled={!canHunt || hunt.running}
+            disabled={!canHunt || !capOk || hunt.running}
             onClick={actions.runHunt}
-            aria-describedby="hunt-note"
+            aria-describedby={cap ? 'hunt-note hunt-cost' : 'hunt-note'}
             className="w-full"
           >
             {sampleMode ? t.runSampleHunt : t.runHunt}
@@ -248,6 +268,11 @@ export function Today() {
                   ? t.huntReady
                   : t.huntNeedsKey}
           </p>
+          {cap && (
+            <p id="hunt-cost" className={cx('type-caption', capOk ? 'text-ink-2' : 'text-foreground')}>
+              {capNote(cap)}
+            </p>
+          )}
         </div>
       </Card>
 

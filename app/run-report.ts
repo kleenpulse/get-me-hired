@@ -12,6 +12,7 @@ import { followupsDue, type Cadence } from '@/core/lifecycle';
 import { paidCost, PRICES, PRICES_CHECKED_ON, type Usage } from '@/core/prices';
 import { PROVIDERS, type ProviderId } from '@/core/providers';
 import { newGroupOf } from '@/core/ranking';
+import { usd } from './format';
 import { strings } from './strings';
 
 const r = strings.report;
@@ -30,6 +31,8 @@ export interface ReportInput {
   failedSources: readonly string[];
   unread: number;
   usage: Usage | null;
+  /** The monthly cap, for a hunt that stopped at it (AC-4.13). `partial` when some calls didn't report their tokens. */
+  cap?: { usd: number; partial: boolean };
   /** All saved leads, for the follow-ups due on this date. */
   leads: readonly Lead[];
   cadence: Cadence;
@@ -143,7 +146,8 @@ function statusLine(input: ReportInput): string {
   if (input.status === 'completed') return r.status.completed(input.kept.length, input.dropped.length);
   if (input.status === 'cancelled') return r.status.cancelled(input.kept.length, input.dropped.length);
   const provider = input.provider ? PROVIDERS[input.provider].name : strings.hunt.yourProvider;
-  const why = strings.hunt.failedWhy(input.problem ?? 'unknown', provider);
+  const cap = input.cap ? { usd: usd(input.cap.usd), partial: input.cap.partial } : undefined;
+  const why = strings.hunt.failedWhy(input.problem ?? 'unknown', provider, cap);
   return r.stopped([why, input.kept.length > 0 ? strings.hunt.keptBeforeStop(input.kept.length) : ''].filter(Boolean).join(' '));
 }
 

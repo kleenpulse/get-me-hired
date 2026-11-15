@@ -7,9 +7,15 @@ import type { Lead } from '@/core/lead';
 import { DEFAULT_CADENCE, type Cadence } from '@/core/lifecycle';
 import { emptyProfile, type Profile } from '@/core/profile';
 import type { ProviderId } from '@/core/providers';
+import { isValidMonthlyCap } from '@/core/settings-bounds';
 
 export const FORMAT_VERSION = 1;
 export const DEFAULT_DAILY_TARGET = 20;
+/**
+ * The monthly spending cap a new user starts with, in US dollars at the list
+ * price. About 60 hunts at the measured cost of one (core/budget.ts).
+ */
+export const DEFAULT_MONTHLY_CAP = 2;
 
 export interface Settings {
   /** True once the user has been through the welcome screens (FR-1.2). */
@@ -18,6 +24,8 @@ export interface Settings {
   sampleMode: boolean;
   /** How many people to write to in a day (FR-4.14). */
   dailyTarget: number;
+  /** The monthly spending cap, in whole US dollars at the list price (FR-10.2, AC-4.13). */
+  monthlyCap: number;
   /** The local date of the last backup download, for the 7-day reminder (FR-9.2). */
   lastBackupOn: string | null;
   /** Theme and text size (FR-10.5). */
@@ -41,6 +49,14 @@ export interface RunRecord {
   provider?: ProviderId | null;
   /** Why a stopped hunt stopped. */
   problem?: HuntResult['problem'];
+  /**
+   * What the run cost at the list price, in US dollars (FR-4.13): `null` when its
+   * model has no known price. Runs from before the cap, and reports written by
+   * the skill, have none.
+   */
+  listCost?: number | null;
+  /** Calls in the run that didn't report their tokens, so `listCost` leaves them out. */
+  unreported?: number;
   /** The run report (FR-8.1) as Markdown, and its file name in `runs/`. Hunts from before reports have none. */
   report?: string;
   reportName?: string;
@@ -66,6 +82,7 @@ export function emptyData(): AppData {
       welcomeDone: false,
       sampleMode: false,
       dailyTarget: DEFAULT_DAILY_TARGET,
+      monthlyCap: DEFAULT_MONTHLY_CAP,
       cadence: DEFAULT_CADENCE,
       provider: null,
       lastBackupOn: null,
@@ -89,6 +106,7 @@ export function withDefaults(saved: AppData): AppData {
       ...saved.settings,
       // Older data has no display settings, and a bad value falls back to the defaults.
       display: isDisplay(saved.settings?.display) ? saved.settings.display : DEFAULT_DISPLAY,
+      monthlyCap: isValidMonthlyCap(saved.settings?.monthlyCap) ? saved.settings.monthlyCap : DEFAULT_MONTHLY_CAP,
     },
   };
 }

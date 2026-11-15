@@ -20,6 +20,7 @@
 // Only Gemini has the page reader here, so with another provider the step is
 // skipped and says why.
 
+import { knownPromptBound, pageReadBound } from './budget';
 import { daysBetween, localDate } from './dates';
 import { foldText, isQuoted, isWebUrl } from './evidence';
 import type { Lead } from './lead';
@@ -108,7 +109,7 @@ interface ListedRound {
 const RETRIEVED = 'URL_RETRIEVAL_STATUS_SUCCESS';
 
 /** How a call ended. `stop` is a key or account problem that ends the hunt. */
-type Call<T> = { kind: 'ok'; value: T } | { kind: 'failed' } | { kind: 'cancelled' } | { kind: 'stop'; problem: KeyProblem };
+type Call<T> = { kind: 'ok'; value: T } | { kind: 'failed' } | { kind: 'cancelled' } | { kind: 'stop'; problem: KeyProblem | 'cap-reached' };
 
 function ended<T>(context: StageContext, error: unknown): Call<T> {
   if (context.signal.aborted) return { kind: 'cancelled' };
@@ -129,6 +130,9 @@ interface UrlContextMetadata {
 /** Call 1: the page reader reads one URL and answers in plain text. */
 async function readPage(context: StageContext, url: string, ask: string): Promise<Call<Page>> {
   const { sdk, model, signal } = context;
+  // The page itself is billed as input, and the app never sees it: no bound (see budget.ts).
+  const bound = pageReadBound(MAX_OUTPUT_TOKENS);
+  if (!context.allows(bound)) return { kind: 'stop', problem: 'cap-reached' };
   try {
     const { google } = await import('@ai-sdk/google');
     const result = await sdk.generateText({
@@ -140,7 +144,7 @@ async function readPage(context: StageContext, url: string, ask: string): Promis
       maxRetries: MAX_RETRIES,
       abortSignal: signal,
     });
-    context.addUsage(result.usage);
+    context.addUsage(result.usage, bound);
     const meta = (result.providerMetadata?.google as UrlContextMetadata | undefined)?.urlContextMetadata?.urlMetadata ?? [];
     const retrieved = meta.some(
       (entry) => normaliseUrl(entry.retrievedUrl) === normaliseUrl(url) && entry.urlRetrievalStatus === RETRIEVED,
@@ -154,17 +158,20 @@ async function readPage(context: StageContext, url: string, ask: string): Promis
 /** Call 2: no tools. Turns call 1's text, given only as data, into JSON. */
 async function toJson<S extends ZodType>(context: StageContext, text: string, ask: string, schema: S): Promise<Call<output<S>>> {
   const { sdk, model, signal } = context;
+  const prompt = `${ask}\n\n<text>\n${text.replace(/<(\/?)text\b/gi, '‹$1text')}\n</text>`;
+  const bound = knownPromptBound([SYSTEM, prompt], MAX_OUTPUT_TOKENS);
+  if (!context.allows(bound)) return { kind: 'stop', problem: 'cap-reached' };
   try {
     const result = await sdk.generateText({
       model,
       system: SYSTEM,
-      prompt: `${ask}\n\n<text>\n${text.replace(/<(\/?)text\b/gi, '‹$1text')}\n</text>`,
+      prompt,
       output: sdk.Output.object({ schema }),
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       maxRetries: MAX_RETRIES,
       abortSignal: signal,
     });
-    context.addUsage(result.usage);
+    context.addUsage(result.usage, bound);
     return { kind: 'ok', value: result.output as output<S> };
   } catch (error) {
     return ended(context, error);
@@ -185,6 +192,11 @@ export async function runFundingStage(context: StageContext): Promise<StageEnd> 
   const { settings, now, set } = context;
   if (settings.provider !== 'gemini') {
     set('funding', { state: 'skipped', skipReason: 'needs-page-reader' });
+    return 'done';
+  }
+  // Its page reads have no cost bound, so under a cap they run only when input costs nothing (AC-4.13).
+  if (!context.allows(pageReadBound(MAX_OUTPUT_TOKENS))) {
+    set('funding', { state: 'skipped', skipReason: 'no-cost-bound' });
     return 'done';
   }
   set('funding', { state: 'running', count: 0 });
@@ -329,7 +341,7 @@ export async function runFundingStage(context: StageContext): Promise<StageEnd> 
   return 'done';
 }
 
-function failed(context: StageContext, checked: number, problem: KeyProblem): StageEnd {
+function failed(context: StageContext, checked: number, problem: KeyProblem | 'cap-reached'): StageEnd {
   context.set('funding', { state: 'failed', count: checked });
   return { stop: problem };
 }

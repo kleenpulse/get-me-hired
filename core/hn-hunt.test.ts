@@ -373,3 +373,98 @@ describe('the do-not-contact list in a hunt (AC-5.7)', () => {
     expect(JSON.stringify(result.dropped)).not.toContain('ana@quillstack.example');
   });
 });
+
+describe('the monthly spending cap in a hunt (AC-4.13)', () => {
+  // 16 openings like Quillstack's, so the hunt makes 2 model calls of 8.
+  const copies = Array.from({ length: 16 }, (_, index) => ({ ...COMMENTS.quillstack, id: 91000001 + index }));
+  const thread = { ...ITEM_ANSWER, children: copies };
+
+  /** HN with 16 openings, and Gemini keeping each one, with or without its token counts. */
+  function capped(calls: string[], reportUsage: boolean): typeof fetch {
+    return (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
+      if (url.includes('/search_by_date')) return json(SEARCH_ANSWER);
+      if (url.endsWith(`/items/${THREAD_ID}`)) return json(thread);
+      if (url.startsWith('https://generativelanguage.googleapis.com/')) {
+        calls.push(url);
+        const ids = [...String(init?.body ?? '').matchAll(/<comment id=\\"(\d+)\\">/g)].map((match) => match[1] ?? '');
+        const text = JSON.stringify({ leads: ids.map((id) => ({ ...VERDICTS[COMMENTS.quillstack.id]!, commentId: id })) });
+        if (reportUsage) return geminiAnswer(text);
+        return json({ candidates: [{ content: { parts: [{ text }], role: 'model' }, finishReason: 'STOP', index: 0 }] });
+      }
+      throw new TypeError(`Unexpected request to ${url}`);
+    }) as typeof fetch;
+  }
+
+  async function cappedHunt(fetcher: typeof fetch, cap: { usd: number; spentUsd: number }) {
+    return createRealHunt({ provider: 'gemini', key: KEY, profile: PROFILE, fetch: fetcher, knownKeys: new Set(), sources: { funding: false }, cap })({
+      now: NOW,
+      signal: new AbortController().signal,
+      onProgress: () => {},
+    });
+  }
+
+  // Each call's bound is about a cent at Gemini's list price: up to 6,000 tokens out at
+  // $1.50 a million, plus the prompt. $0.015 left fits one call, but not two at their bound.
+  const NEARLY_SPENT = { usd: 2, spentUsd: 2 - 0.015 };
+
+  it('makes no call once the month has reached the cap, and says why', async () => {
+    const calls: string[] = [];
+    const result = await cappedHunt(capped(calls, true), { usd: 2, spentUsd: 2 });
+    expect(calls).toEqual([]);
+    expect(result.status).toBe('failed');
+    expect(result.problem).toBe('cap-reached');
+    expect(result.leads).toEqual([]);
+    expect(result.steps.find((step) => step.id === 'community')).toMatchObject({ state: 'failed', count: 0 });
+  });
+
+  it('stops before the call that could pass the cap, and keeps what it found (AC-4.13)', async () => {
+    const calls: string[] = [];
+    // No token counts in the answer: the first call is charged at its bound, never at $0.
+    const result = await cappedHunt(capped(calls, false), NEARLY_SPENT);
+    expect(calls).toHaveLength(1);
+    expect(result.status).toBe('failed');
+    expect(result.problem).toBe('cap-reached');
+    expect(result.leads).toHaveLength(8);
+    expect(result.usage?.unreported).toBe(1);
+    expect(result.steps.find((step) => step.id === 'community')).toMatchObject({ state: 'failed', count: 8 });
+    // What the run reports as its cost holds that call at its bound (at least the
+    // 6,000 output tokens at $1.50 a million), so the next hunt counts it, not $0.
+    expect(result.chargedUsd).toBeGreaterThanOrEqual(0.009);
+  });
+
+  it('goes on while the reported cost leaves room', async () => {
+    const calls: string[] = [];
+    const result = await cappedHunt(capped(calls, true), NEARLY_SPENT);
+    expect(calls).toHaveLength(2);
+    expect(result.status).toBe('completed');
+    expect(result.leads).toHaveLength(16);
+    // Reported calls cost what they used: 2 × (900 in, 300 out) at Gemini's list price.
+    expect(result.chargedUsd).toBeCloseTo((2 * 900 * 0.25 + 2 * 300 * 1.5) / 1_000_000);
+  });
+
+  it('never stops a model that costs nothing', async () => {
+    const calls: string[] = [];
+    const hn = capped([], true);
+    // OpenRouter's free model: its calls are recorded, and the call itself is made.
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith('https://openrouter.ai/')) {
+        calls.push(String(input));
+        return new Response(JSON.stringify({ error: { message: 'stand-in' } }), { status: 400 });
+      }
+      return hn(input, init);
+    }) as typeof fetch;
+    const result = await createRealHunt({
+      provider: 'openrouter',
+      key: KEY,
+      profile: PROFILE,
+      fetch: fetcher,
+      knownKeys: new Set(),
+      sources: { funding: false },
+      cap: { usd: 1, spentUsd: 1 },
+    })({ now: NOW, signal: new AbortController().signal, onProgress: () => {} });
+    expect(calls.length).toBeGreaterThan(0);
+    expect(result.problem).not.toBe('cap-reached');
+  });
+});

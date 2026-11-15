@@ -13,6 +13,7 @@ import {
 } from 'react';
 import { flushSync } from 'react-dom';
 import { sameEntry, type BlockEntry } from '@/core/block';
+import { spentThisMonth } from '@/core/budget';
 import { localDate } from '@/core/dates';
 import { waitingSteps, type HuntProgress, type HuntResult, type HuntRunner, type HuntStep } from '@/core/hunt';
 import type { Lead, LeadStatus, StatusChange } from '@/core/lead';
@@ -47,7 +48,9 @@ import {
 import type { Incoming, MergeSummary } from './backup';
 import { downloadBlob } from './download';
 import { deletePerson } from './erase';
+import { capAllowsStart, capState } from './cap';
 import { addFound, applyBlocks } from './found';
+import { usd } from './format';
 import { strings } from './strings';
 
 export interface HuntState {
@@ -81,7 +84,7 @@ interface Actions {
   /** Runs the app in memory only, after the browser refused to store data. */
   continueWithoutSaving: () => void;
   /** Changes settings that save as they're made: the daily target, the cadence, the display (FR-10.2, FR-10.5). */
-  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display'>>) => void;
+  updateSettings: (change: Partial<Pick<Settings, 'dailyTarget' | 'cadence' | 'display' | 'monthlyCap'>>) => void;
   /**
    * Adds entries to the do-not-contact list (FR-5.7) and applies them to saved
    * leads at once: leads on a blocked domain are removed, and blocked people and
@@ -184,8 +187,15 @@ function providerName(provider: ProviderId | null): string {
 }
 
 /** The outcome of a hunt, in words. */
-function huntMessage(result: HuntResult, added: number, provider: ProviderId | null): string {
-  if (result.status === 'failed') return strings.hunt.failed(result.problem ?? 'unknown', providerName(provider), added);
+function huntMessage(result: HuntResult, added: number, provider: ProviderId | null, data: AppData, today: string): string {
+  if (result.status === 'failed') {
+    // A hunt stopped at the cap names it, and says when the month's total leaves calls out (AC-4.13).
+    const cap =
+      result.problem === 'cap-reached'
+        ? { usd: usd(data.settings.monthlyCap), partial: spentThisMonth(data.runs, today).partial || (result.usage?.unreported ?? 0) > 0 }
+        : undefined;
+    return strings.hunt.failed(result.problem ?? 'unknown', providerName(provider), added, cap);
+  }
   if (result.status === 'cancelled') return strings.hunt.cancelled(result.leads.length);
   const outcome = added === 0 ? strings.hunt.nothingNew : strings.hunt.finished(added);
   return [
@@ -317,6 +327,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const key = provider ? keys.current[provider] : undefined;
     // A real hunt needs a provider with a saved key and a complete profile (FR-3.6).
     if (!sample && (!provider || !key || !profile || missingFields(profile).length > 0)) return;
+    // A real hunt that could go past this month's cap doesn't start (AC-4.13). Today says why.
+    const today = localDate(new Date());
+    const cap = !sample && provider ? capState(latest.current, provider, today) : null;
+    if (cap && !capAllowsStart(cap)) return;
 
     const control = new AbortController();
     huntControl.current = control;
@@ -338,6 +352,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               // at its own article (AC-4.6), and the stage would spend a minute to keep nothing.
               // It comes back on with a page reader that returns links (Firecrawl, FR-2.3). FRD §19.
               sources: { funding: false },
+              // Checked before every model call. A free model has no cap to reach.
+              ...(cap && cap.kind === 'ok' ? { cap: { usd: cap.cap, spentUsd: cap.spent.usd } } : {}),
             }),
           );
 
@@ -358,7 +374,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...current,
           running: false,
           progress: { steps: result.steps, kept: result.leads.length, dropped: result.dropped.length },
-          message: huntMessage(result, added, provider),
+          message: huntMessage(result, added, provider, latest.current, localDate(finishedAt)),
           failed: result.status === 'failed',
         }));
       })

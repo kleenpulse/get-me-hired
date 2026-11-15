@@ -22,6 +22,7 @@ import { localDate } from './dates';
 import { findEmails, firstWebUrl, isQuoted, isWebUrl } from './evidence';
 import { commentUrl, loadHiringThread, profileWords, shortlist, type HnComment } from './hn';
 import type { DroppedLead, DropReason } from './hunt';
+import { knownPromptBound } from './budget';
 import type { Lead, Person, Signal } from './lead';
 import { leadKey } from './lead-key';
 import type { Profile } from './profile';
@@ -269,17 +270,24 @@ export async function runHnStage(context: StageContext): Promise<StageEnd> {
     if (signal.aborted) return 'cancelled';
     const batch = comments.slice(start, start + BATCH);
     const byId = new Map(batch.map((comment) => [comment.id, comment]));
+    const text = prompt(settings.profile, batch);
+    const bound = knownPromptBound([SYSTEM, text], MAX_OUTPUT_TOKENS);
+    // The monthly cap is checked before every call (AC-4.13). What was found so far is kept.
+    if (!context.allows(bound)) {
+      set('community', { state: 'failed', count: checked });
+      return { stop: 'cap-reached' };
+    }
     try {
       const result = await sdk.generateText({
         model,
         system: SYSTEM,
-        prompt: prompt(settings.profile, batch),
+        prompt: text,
         output: sdk.Output.object({ schema }),
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         maxRetries: MAX_RETRIES,
         abortSignal: signal,
       });
-      context.addUsage(result.usage);
+      context.addUsage(result.usage, bound);
       const seen = new Set<string>();
       for (const verdict of result.output.leads as Verdict[]) {
         const comment = byId.get(verdict.commentId);

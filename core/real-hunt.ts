@@ -10,11 +10,12 @@
 // exists (see loadSdk in providers.ts).
 
 import { applyBlockList, type BlockEntry } from './block';
+import { Budget, type CallBound } from './budget';
 import { waitingSteps, type DroppedLead, type HuntResult, type HuntRunner, type HuntStep, type HuntStepId } from './hunt';
 import type { Lead } from './lead';
 import type { Profile } from './profile';
 import { addUsage, NO_USAGE, type Usage } from './prices';
-import { classifyProviderError, loadModel, loadSdk, type KeyProblem, type ProviderId } from './providers';
+import { classifyProviderError, loadModel, loadSdk, PROVIDERS, type KeyProblem, type ProviderId } from './providers';
 
 export interface RealHuntSettings {
   provider: ProviderId;
@@ -29,6 +30,11 @@ export interface RealHuntSettings {
   fundingListings?: readonly string[];
   /** The do-not-contact list (FR-5.7), applied to every lead before it is kept. */
   blockList?: readonly BlockEntry[];
+  /**
+   * The monthly spending cap (AC-4.13), in US dollars at the list price, and what
+   * earlier runs this month cost. Left out, nothing is checked.
+   */
+  cap?: { usd: number; spentUsd: number };
 }
 
 /** What a stage gets: the settings, the SDK, and one place to keep and drop leads. */
@@ -46,8 +52,13 @@ export interface StageContext {
   addUnread: (count: number) => void;
   /** A source that couldn't be searched today, by host name (FR-4.11). */
   addFailedSource: (host: string) => void;
-  /** Adds one answered model call's token counts (FR-4.13). */
-  addUsage: (usage: { inputTokens?: number | undefined; outputTokens?: number | undefined }) => void;
+  /**
+   * True when a call with this bound fits under the monthly cap (AC-4.13). Ask before
+   * every model call. When it's false, don't make the call: stop with `cap-reached`.
+   */
+  allows: (bound: CallBound) => boolean;
+  /** Adds one answered model call's token counts (FR-4.13), with the bound it was allowed at. */
+  addUsage: (usage: { inputTokens?: number | undefined; outputTokens?: number | undefined }, bound: CallBound) => void;
 }
 
 /** How a stage ended. A key or account problem stops the whole hunt. */
@@ -69,6 +80,9 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
     const failedSources: string[] = [];
     let unread = 0;
     let usage: Usage = NO_USAGE;
+    // Kept with or without a cap: it also works out what the run cost, with calls that
+    // reported nothing at their bound, for the next hunt's monthly total (AC-4.13).
+    const budget = new Budget(PROVIDERS[settings.provider].model, settings.cap?.usd ?? Infinity, settings.cap?.spentUsd ?? 0);
 
     const report = () => onProgress({ steps: steps.map((step) => ({ ...step })), kept: leads.length, dropped: dropped.length });
     const set = (id: HuntStepId, change: Partial<HuntStep>) => {
@@ -84,6 +98,7 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
       ...(unread > 0 ? { unread } : {}),
       ...(failedSources.length > 0 ? { failedSources } : {}),
       usage,
+      chargedUsd: budget.runCost(usage),
     });
 
     // Fresh posts and their age check need web search, which no free key has (FRD §19).
@@ -133,8 +148,12 @@ export function createRealHunt(settings: RealHuntSettings): HuntRunner {
       addUnread: (count) => {
         unread += count;
       },
-      addUsage: (more) => {
-        usage = addUsage(usage, more);
+      allows: (bound) => (settings.cap ? budget.allows(bound, usage) : true),
+      addUsage: (more, bound) => {
+        const next = addUsage(usage, more);
+        // A call that didn't say what it used is charged at its bound, never at $0.
+        if (next.unreported > usage.unreported) budget.chargeUnreported(bound);
+        usage = next;
       },
       addFailedSource: (host) => {
         if (!failedSources.includes(host)) failedSources.push(host);

@@ -259,3 +259,46 @@ describe('the round trip keeps notes', () => {
     expect(read.incoming.leads.find((lead) => lead.company === 'Quarry & Finch')?.notes).toBe('Said to write again in January.');
   });
 });
+
+describe('the monthly cap in a backup (AC-4.13)', () => {
+  const zipWith = (extras: unknown) =>
+    writeZip([
+      { name: 'get-me-hired.json', data: new TextEncoder().encode(JSON.stringify(extras)) },
+      { name: 'leads.csv', data: new TextEncoder().encode(`${LEADS_CSV_HEADER.join(',')}\n`) },
+    ]);
+  const read = async (extras: unknown) => {
+    const result = await readBackup(zipWith({ format_version: 1, ...(extras as object) }), inflateRaw);
+    if (!result.ok) throw new Error('backup unreadable');
+    return result.incoming;
+  };
+  const settings = (monthlyCap: unknown) => ({ daily_target: 20, cadence: { followupDelays: [5], closeAfter: 7 }, monthly_cap: monthlyCap });
+  const run = (listCost: unknown) => ({ at: '2026-11-15T09:00:00.000Z', date: '2026-11-15', status: 'completed', kept: 0, dropped: [], list_cost: listCost });
+
+  it('travels in the backup with each run’s cost', async () => {
+    const data: AppData = {
+      ...emptyData(),
+      settings: { ...emptyData().settings, monthlyCap: 40 },
+      runs: [{ at: '2026-11-15T09:00:00.000Z', date: '2026-11-15', status: 'completed', kept: 0, dropped: [], sample: false, listCost: 0.03, unreported: 1 }],
+    };
+    const result = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!result.ok) throw new Error('backup unreadable');
+    expect(result.incoming.settings?.monthlyCap).toBe(40);
+    expect(result.incoming.runs[0]).toMatchObject({ listCost: 0.03, unreported: 1 });
+  });
+
+  it('keeps a cap in range, and ignores one outside it while keeping the other settings', async () => {
+    expect((await read({ settings: settings(50) })).settings?.monthlyCap).toBe(50);
+    for (const bad of [0, -5, 2.5, 501, 1e9, '10', null]) {
+      const incoming = await read({ settings: settings(bad) });
+      expect(incoming.settings).not.toBeNull();
+      expect(incoming.settings).not.toHaveProperty('monthlyCap');
+    }
+  });
+
+  it('reads a cost that is not a sane dollar figure as unknown, never as $0', async () => {
+    expect((await read({ runs: [run(0.5)] })).runs[0]?.listCost).toBe(0.5);
+    expect((await read({ runs: [run(null)] })).runs[0]?.listCost).toBeNull();
+    for (const bad of [-1, 1e9, '0.5', Number.NaN]) expect((await read({ runs: [run(bad)] })).runs[0]?.listCost).toBeNull();
+    expect((await read({ runs: [{ ...run(0), list_cost: undefined }] })).runs[0]).not.toHaveProperty('listCost');
+  });
+});
