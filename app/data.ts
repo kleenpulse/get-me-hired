@@ -8,6 +8,7 @@ import { DEFAULT_CADENCE, type Cadence } from '@/core/lifecycle';
 import { emptyProfile, type Profile } from '@/core/profile';
 import type { ProviderId } from '@/core/providers';
 import { isValidMonthlyCap } from '@/core/settings-bounds';
+import { DEFAULT_SOURCES, isSourceSwitches, type SourceSwitches } from './sources';
 
 export const FORMAT_VERSION = 1;
 export const DEFAULT_DAILY_TARGET = 20;
@@ -28,6 +29,8 @@ export interface Settings {
   monthlyCap: number;
   /** Start today's hunt when the app is opened and it hasn't run yet (FR-4.2). Off until the user turns it on. */
   runOnOpen: boolean;
+  /** Sources switched on or off (FR-10.3). Funding news and fresh posts can't run yet, so they aren't here. */
+  sources: SourceSwitches;
   /** The local date of the last backup download, for the 7-day reminder (FR-9.2). */
   lastBackupOn: string | null;
   /** Theme and text size (FR-10.5). */
@@ -97,6 +100,7 @@ export function emptyData(): AppData {
       dailyTarget: DEFAULT_DAILY_TARGET,
       monthlyCap: DEFAULT_MONTHLY_CAP,
       runOnOpen: false,
+      sources: DEFAULT_SOURCES,
       cadence: DEFAULT_CADENCE,
       provider: null,
       lastBackupOn: null,
@@ -122,6 +126,7 @@ export function withDefaults(saved: AppData): AppData {
       display: isDisplay(saved.settings?.display) ? saved.settings.display : DEFAULT_DISPLAY,
       monthlyCap: isValidMonthlyCap(saved.settings?.monthlyCap) ? saved.settings.monthlyCap : DEFAULT_MONTHLY_CAP,
       runOnOpen: saved.settings?.runOnOpen === true,
+      sources: isSourceSwitches(saved.settings?.sources) ? { community: saved.settings.sources.community } : DEFAULT_SOURCES,
     },
   };
 }

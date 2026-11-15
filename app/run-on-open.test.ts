@@ -61,6 +61,10 @@ describe('run on open (FR-4.2)', () => {
     expect(shouldRunOnOpen(ready({}, [run(TODAY, { sample: true })]), ['gemini'], TODAY)).toBe(true);
   });
 
+  it("doesn't start when every source is off, so no empty run blocks the day (FR-10.3)", () => {
+    expect(shouldRunOnOpen(ready({ sources: { community: false } }), ['gemini'], TODAY)).toBe(false);
+  });
+
   it("doesn't start when the monthly cap would stop it (AC-4.13)", () => {
     expect(shouldRunOnOpen(ready({ monthlyCap: 1 }, [run('2026-11-02', { listCost: 1 })]), ['gemini'], TODAY)).toBe(false);
   });

@@ -295,6 +295,18 @@ describe('the monthly cap in a backup (AC-4.13)', () => {
     }
   });
 
+  it('carries the source switches, and takes only a real true or false (FR-10.3)', async () => {
+    const data: AppData = { ...emptyData(), settings: { ...emptyData().settings, sources: { community: false } } };
+    const result = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!result.ok) throw new Error('backup unreadable');
+    expect(result.incoming.settings?.sources).toEqual({ community: false });
+    for (const bad of [{ community: 'false' }, 'off', null, {}]) {
+      const incoming = await read({ settings: { ...settings(5), sources: bad } });
+      expect(incoming.settings).not.toBeNull();
+      expect(incoming.settings).not.toHaveProperty('sources');
+    }
+  });
+
   it('carries run on open, and takes only a real true or false (FR-4.2)', async () => {
     const data: AppData = { ...emptyData(), settings: { ...emptyData().settings, runOnOpen: true } };
     const result = await readBackup(backupZip(data, NOW), inflateRaw);
