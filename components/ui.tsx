@@ -1,7 +1,7 @@
 // The basic Dawn pieces from DESIGN.md: buttons, cards, pills and tags.
 // Sizes are minimums, so they grow with the Text size setting.
 
-import type { ButtonHTMLAttributes, ComponentType, HTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ComponentProps, ComponentType, HTMLAttributes, ReactNode } from 'react';
 
 export type Icon = ComponentType<{ size?: number; strokeWidth?: number; className?: string; 'aria-hidden'?: boolean }>;
 
@@ -22,7 +22,7 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   destructive: 'min-h-[46px] bg-critical px-5 text-critical-foreground type-label',
 };
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ComponentProps<'button'> {
   variant?: ButtonVariant;
   icon?: Icon;
 }

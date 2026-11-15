@@ -285,15 +285,6 @@
     color: inherit;
   }
 
-  /* 16px inputs on phones, so iOS doesn't zoom the page on focus. */
-  @media (max-width: 639px) {
-    input,
-    select,
-    textarea {
-      font-size: 1rem;
-    }
-  }
-
   dialog::backdrop {
     background: var(--scrim);
   }
@@ -301,6 +292,19 @@
   .tabular {
     font-family: var(--font-numeric);
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/*
+ * 16px inputs on phones, so iOS doesn't zoom the page on focus. Outside any
+ * layer on purpose: unlayered rules beat the type-* utilities, which set a
+ * smaller size on the same inputs.
+ */
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
   }
 }
 

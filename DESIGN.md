@@ -341,7 +341,8 @@ Rules:
 
 | Screen | Recipe | Dawn card | Slate card | Primary button |
 |---|---|---|---|---|
-| Welcome, Connect a provider, Your profile | No rail. One centred column, 560px max | The step card | None | CONTINUE |
+| Welcome, Connect a provider | No rail. One centred column, 560px max | The step card | None | CONTINUE |
+| Your profile | One column of pearl group cards, 760px max, each with a card header and a hairline. A save bar stays in view at the bottom: the save state in words, then the button. It is a pearl card with `--shadow-overlay` and a 1px `--border` line | None | None | SAVE PROFILE |
 | Today | 3 + 1, as above | Day card | Hunt in progress | RUN TODAY'S HUNT |
 | Board | Columns are pearl cards, 300px wide, scrolling sideways. Leads are white tiles. Under 768px: a list grouped by status (FR-6.14) | None | None | None |
 | Lead detail | Side panel, 480px, on `--sheet`. Full screen under 640px | None | None | MARK AS EMAILED, for the next person not yet emailed |
@@ -404,6 +405,8 @@ Sizes are minimums. Every interactive part has these states:
 | **Slider** | 60px tall, pill | The filled part is `--lift`, the rest is mist (`--glass` on the slate card). A 2px `--foreground` line is the handle. The value is written inside, in `label`. Arrow keys move it by one step |
 | **Text input** | 46px tall, pill | `--lift` fill on a card, mist fill on the sheet. `--ink-3` placeholder. The label sits above, always visible |
 | **Key field** | As text input | `data` font, hidden by default, with show, paste and Test buttons (FR-2.4) |
+| **Chip field** | As text input | For lists, such as roles and skills. Chosen items sit above the input as 36px mist pills in `label`, each with a 28px remove button. Enter or a comma adds an item. Below the help caption, "Ideas:" and 32px white pills with a plus icon, in `caption`, add an example with one tap (FR-3.4) |
+| **Choice pills** | 46px tall, pill | One pick from a few options, such as "Remote only". Mist when off. When on: `--lift` fill, `--shadow-lift` and a check icon, so the choice never rests on colour alone. A real radio input inside each, so arrow keys work |
 | **Text area** | Radius 20px | The Draft checker's paste box and lead notes |
 
 ### Pieces

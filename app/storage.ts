@@ -1,18 +1,36 @@
 // Browser storage (FR-9.1). Everything is one record in IndexedDB, written in
 // one transaction, so a closed tab can never leave half a save behind (NFR-7).
 
-import { FORMAT_VERSION, type AppData } from './data';
+import { FORMAT_VERSION, withDefaults, type AppData } from './data';
 
 const DATABASE = 'get-me-hired';
 const STORE = 'app';
 const RECORD = 'data';
 
+/**
+ * The browser won't let the app store anything: there is no IndexedDB, or
+ * opening it failed. That happens when the user blocks cookies and site data,
+ * and in some private windows. It doesn't mean saved data was lost.
+ */
+export class StorageBlockedError extends Error {
+  constructor(cause?: unknown) {
+    super('This browser is not letting the app store data', { cause });
+    this.name = 'StorageBlockedError';
+  }
+}
+
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE, 1);
+    if (typeof indexedDB === 'undefined') return reject(new StorageBlockedError());
+    let request: IDBOpenDBRequest;
+    try {
+      request = indexedDB.open(DATABASE, 1);
+    } catch (error) {
+      return reject(new StorageBlockedError(error));
+    }
     request.onupgradeneeded = () => request.result.createObjectStore(STORE);
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Could not open the database'));
+    request.onerror = () => reject(new StorageBlockedError(request.error));
   });
 }
 
@@ -31,12 +49,20 @@ async function transact<T>(mode: IDBTransactionMode, work: (store: IDBObjectStor
   }
 }
 
+/** Thrown when the saved data comes from a newer version of the app (FRD §11.4). */
+export class NewerDataError extends Error {
+  constructor() {
+    super('This data is from a newer version of the app');
+    this.name = 'NewerDataError';
+  }
+}
+
 /** The saved data, or `null` on a first visit. Data from a newer version of the app is refused (FRD §11.4). */
 export async function loadData(): Promise<AppData | null> {
   const saved = await transact<AppData | undefined>('readonly', (store) => store.get(RECORD));
   if (!saved) return null;
-  if (saved.formatVersion > FORMAT_VERSION) throw new Error('This data is from a newer version of the app');
-  return saved;
+  if (saved.formatVersion > FORMAT_VERSION) throw new NewerDataError();
+  return withDefaults(saved);
 }
 
 export async function saveData(data: AppData): Promise<void> {

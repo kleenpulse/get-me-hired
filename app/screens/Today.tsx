@@ -3,6 +3,7 @@
 
 import { Banknote, BellRing, Check, FlaskConical, Megaphone, MessagesSquare, Reply, Users, X } from 'lucide-react';
 import { useMemo, useState, type CSSProperties } from 'react';
+import { missingFields } from '@/core/profile';
 import { buildToday, type TodayGroup } from '@/core/ranking';
 import { LeadCard } from '@/components/LeadCard';
 import { Banner, Button, Card, cx, EmptyState, StatusPill, type Icon } from '@/components/ui';
@@ -147,11 +148,15 @@ export function Today() {
   const lastRun = data.runs.findLast((run) => run.date === today);
   const doneToday = list.done.emailed + list.done.followups;
 
+  const missing = missingFields(data.profile);
+
   const empty =
     list.entries.length > 0
       ? null
       : !sampleMode && data.leads.length === 0
-        ? 'first'
+        ? data.profile
+          ? 'first'
+          : 'noProfile'
         : sampleMode && data.runs.length === 0
           ? 'sampleReady'
           : 'done';
@@ -202,7 +207,7 @@ export function Today() {
             {sampleMode ? t.runSampleHunt : t.runHunt}
           </Button>
           <p id="hunt-note" className="text-ink-2 type-caption">
-            {sampleMode ? t.sampleHuntNote : t.huntNeedsKey}
+            {sampleMode ? t.sampleHuntNote : missing.length > 0 ? t.huntNeedsProfile(missing) : t.huntNeedsKey}
           </p>
         </div>
       </Card>
@@ -226,6 +231,25 @@ export function Today() {
           </Banner>
         )}
 
+        {empty === 'noProfile' && (
+          <EmptyState
+            title={t.empty.noProfile.title}
+            body={t.empty.noProfile.body}
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link
+                  to="profile"
+                  className="inline-flex min-h-[46px] items-center rounded-pill bg-nested px-5 no-underline type-label hover:brightness-95"
+                >
+                  {t.empty.noProfile.action}
+                </Link>
+                <Button variant="quiet" onClick={actions.startSampleMode}>
+                  {t.empty.noProfile.sample}
+                </Button>
+              </div>
+            }
+          />
+        )}
         {empty === 'first' && (
           <EmptyState
             title={t.empty.first.title}

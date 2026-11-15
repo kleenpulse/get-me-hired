@@ -10,7 +10,6 @@ import type { LeadType } from './leads-csv';
 import { computeTier } from './ranking';
 
 const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
 
 interface SampleSpec {
   type: LeadType;
@@ -313,16 +312,26 @@ const JUNIPER: SampleSpec = {
   signals: [],
 };
 
-function withEmail(lead: Lead, emailedOn: string, status: LeadStatus, now: Date): Lead {
+/** A moment on a local calendar date, at the given hour. */
+function onLocalDate(day: string, hour: number): string {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(year ?? 0, (month ?? 1) - 1, date ?? 1, hour).toISOString();
+}
+
+/**
+ * A lead found and emailed on `emailedOn`. A later status is reached `laterDays`
+ * after that, so the history always agrees with the emailed date.
+ */
+function withEmail(lead: Lead, emailedOn: string, status: LeadStatus, laterDays = 0): Lead {
   return {
     ...lead,
     foundOn: emailedOn,
     status,
     people: lead.people.map((entry, index) => (index === 0 ? { ...entry, emailedOn: [emailedOn] } : entry)),
     statusHistory: [
-      { status: 'new', at: new Date(now.getTime() - 9 * DAY_MS).toISOString() },
-      ...(status === 'emailed' ? [] : [{ status: 'emailed' as const, at: new Date(now.getTime() - 8 * DAY_MS).toISOString() }]),
-      { status, at: new Date(now.getTime() - 2 * DAY_MS).toISOString() },
+      { status: 'new', at: onLocalDate(emailedOn, 9) },
+      { status: 'emailed', at: onLocalDate(emailedOn, 10) },
+      ...(status === 'emailed' ? [] : [{ status, at: onLocalDate(addDays(emailedOn, laterDays), 14) }]),
     ],
   };
 }
@@ -333,9 +342,9 @@ export function buildSamplePipeline(now: Date): Lead[] {
   // Emailed a week ago: 5 working days later is today or the last working day, so a follow-up is due.
   const weekAgo = addDays(today, -7);
   return [
-    withEmail(build(QUARRY, now), weekAgo, 'emailed', now),
-    withEmail(build(MOSSLINE, now), addDays(today, -9), 'replied', now),
-    withEmail(build(JUNIPER, now), addDays(today, -12), 'call', now),
+    withEmail(build(QUARRY, now), weekAgo, 'emailed'),
+    withEmail(build(MOSSLINE, now), addDays(today, -9), 'replied', 3),
+    withEmail(build(JUNIPER, now), addDays(today, -12), 'call', 5),
   ];
 }
 

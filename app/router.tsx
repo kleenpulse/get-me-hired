@@ -3,11 +3,12 @@
 
 import { useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from 'react';
 
-export type Route = 'today' | 'board' | 'data';
+export type Route = 'today' | 'board' | 'profile' | 'data';
 
 export const PATHS: Record<Route, string> = {
   today: '/',
   board: '/board',
+  profile: '/profile',
   data: '/data',
 };
 
@@ -17,6 +18,35 @@ function routeOf(pathname: string): Route {
   return match ?? 'today';
 }
 
+/**
+ * A screen with unsaved changes sets a guard. It returns true when it is fine
+ * to leave, for example after asking the user. One guard at a time.
+ */
+type LeaveGuard = () => boolean;
+let leaveGuard: LeaveGuard | null = null;
+
+export function setLeaveGuard(guard: LeaveGuard): () => void {
+  leaveGuard = guard;
+  return () => {
+    if (leaveGuard === guard) leaveGuard = null;
+  };
+}
+
+// The browser's Back and Forward buttons can't be stopped, only undone. This
+// listener is added before any screen subscribes, so it runs first: if the
+// guard says stay, it puts the old address back and hides the change.
+let shownPath = window.location.pathname;
+let moving = false;
+window.addEventListener('popstate', (event) => {
+  if (moving) return;
+  if (leaveGuard && routeOf(window.location.pathname) !== routeOf(shownPath) && !leaveGuard()) {
+    window.history.pushState(null, '', shownPath);
+    event.stopImmediatePropagation();
+    return;
+  }
+  shownPath = window.location.pathname;
+});
+
 function subscribe(onChange: () => void): () => void {
   window.addEventListener('popstate', onChange);
   return () => window.removeEventListener('popstate', onChange);
@@ -24,8 +54,12 @@ function subscribe(onChange: () => void): () => void {
 
 export function navigate(route: Route): void {
   if (routeOf(window.location.pathname) === route) return;
+  if (leaveGuard && !leaveGuard()) return;
   window.history.pushState(null, '', PATHS[route]);
+  shownPath = PATHS[route];
+  moving = true;
   window.dispatchEvent(new PopStateEvent('popstate'));
+  moving = false;
   window.scrollTo({ top: 0 });
 }
 
