@@ -1,7 +1,19 @@
 // Today, the home screen (FR-6.1). It answers one question: "who do I write to
 // now?" The ranked list is one column, with the Day card beside it.
 
-import { Banknote, BellRing, Check, FlaskConical, Megaphone, MessagesSquare, Reply, Users, X } from 'lucide-react';
+import {
+  Banknote,
+  BellRing,
+  Check,
+  FlaskConical,
+  Megaphone,
+  MessagesSquare,
+  Minus,
+  Reply,
+  TriangleAlert,
+  Users,
+  X,
+} from 'lucide-react';
 import { useMemo, useState, type CSSProperties } from 'react';
 import { missingFields } from '@/core/profile';
 import { buildToday, type TodayGroup } from '@/core/ranking';
@@ -111,11 +123,15 @@ function HuntCard({ hunt, onCancel }: { hunt: HuntState; onCancel: () => void })
               {step.state === 'failed' && <X size={16} strokeWidth={1.5} aria-hidden />}
               {step.state === 'running' && <span aria-hidden className="size-2 animate-fresh-dot rounded-pill bg-signal" />}
               {step.state === 'waiting' && <span aria-hidden className="size-3 rounded-pill border border-ink-3" />}
+              {step.state === 'skipped' && <Minus size={16} strokeWidth={1.5} aria-hidden />}
             </span>
             <span className="min-w-0 flex-1 type-label">
               {h.steps[step.id]}
               <span className="sr-only">. {h.stepStates[step.state]}</span>
             </span>
+            {step.state === 'skipped' && step.skipReason && (
+              <span className="rounded-pill bg-glass px-2.5 py-1 text-ink-2 type-caption">{h.skipReasons[step.skipReason]}</span>
+            )}
             {step.count !== null && (
               <span className="rounded-pill bg-glass px-2.5 py-1 type-caption tabular">{h.stepCount(step.count)}</span>
             )}
@@ -134,7 +150,7 @@ function HuntCard({ hunt, onCancel }: { hunt: HuntState; onCancel: () => void })
 }
 
 export function Today() {
-  const { data, today, now, hunt, actions } = useApp();
+  const { data, today, now, hunt, keyProviders, actions } = useApp();
   const [filter, setFilter] = useState<Filter>('all');
   const { sampleMode, dailyTarget, cadence } = data.settings;
 
@@ -145,18 +161,27 @@ export function Today() {
 
   const shown = filter === 'all' ? list.entries : list.entries.filter((entry) => entry.group === filter);
   const totalPeople = GROUP_ORDER.reduce((sum, group) => sum + list.people[group], 0);
-  const lastRun = data.runs.findLast((run) => run.date === today);
+  // A hunt that stopped with a problem doesn't count as today's hunt.
+  const lastRun = data.runs.findLast((run) => run.date === today && run.status !== 'failed');
   const doneToday = list.done.emailed + list.done.followups;
 
   const missing = missingFields(data.profile);
+  const provider = data.settings.provider;
+  const hasKey = provider !== null && keyProviders.includes(provider);
+  // A real hunt needs a complete profile and a saved key (FR-3.6). A sample hunt needs neither.
+  const canHunt = sampleMode || (missing.length === 0 && hasKey);
 
   const empty =
     list.entries.length > 0
       ? null
       : !sampleMode && data.leads.length === 0
-        ? data.profile
-          ? 'first'
-          : 'noProfile'
+        ? !data.profile
+          ? 'noProfile'
+          : canHunt
+            ? data.runs.some((run) => !run.sample && run.status === 'completed')
+              ? 'nothingYet'
+              : 'readyToHunt'
+            : 'first'
         : sampleMode && data.runs.length === 0
           ? 'sampleReady'
           : 'done';
@@ -199,7 +224,7 @@ export function Today() {
           <Button
             variant="primary"
             icon={sampleMode ? FlaskConical : undefined}
-            disabled={!sampleMode || hunt.running}
+            disabled={!canHunt || hunt.running}
             onClick={actions.runHunt}
             aria-describedby="hunt-note"
             className="w-full"
@@ -207,7 +232,13 @@ export function Today() {
             {sampleMode ? t.runSampleHunt : t.runHunt}
           </Button>
           <p id="hunt-note" className="text-ink-2 type-caption">
-            {sampleMode ? t.sampleHuntNote : missing.length > 0 ? t.huntNeedsProfile(missing) : t.huntNeedsKey}
+            {sampleMode
+              ? t.sampleHuntNote
+              : missing.length > 0
+                ? t.huntNeedsProfile(missing)
+                : hasKey
+                  ? t.huntReady
+                  : t.huntNeedsKey}
           </p>
         </div>
       </Card>
@@ -221,7 +252,9 @@ export function Today() {
         </p>
         {!hunt.running && hunt.message && (
           <div aria-hidden>
-            <Banner icon={Check}>{hunt.message}</Banner>
+            <Banner tone={hunt.failed ? 'failure' : 'info'} icon={hunt.failed ? TriangleAlert : Check}>
+              {hunt.message}
+            </Banner>
           </div>
         )}
 
@@ -254,8 +287,37 @@ export function Today() {
           <EmptyState
             title={t.empty.first.title}
             body={t.empty.first.body}
-            action={<Button onClick={actions.startSampleMode}>{t.empty.first.action}</Button>}
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link
+                  to="settings"
+                  className="inline-flex min-h-[46px] items-center rounded-pill bg-nested px-5 no-underline type-label hover:brightness-95"
+                >
+                  {t.empty.first.settings}
+                </Link>
+                <Button variant="quiet" onClick={actions.startSampleMode}>
+                  {t.empty.first.action}
+                </Button>
+              </div>
+            }
           />
+        )}
+        {empty === 'nothingYet' && !hunt.running && (
+          <EmptyState
+            title={t.empty.nothingYet.title}
+            body={t.empty.nothingYet.body}
+            action={
+              <Link
+                to="profile"
+                className="inline-flex min-h-[46px] items-center rounded-pill bg-nested px-5 no-underline type-label hover:brightness-95"
+              >
+                {t.empty.nothingYet.action}
+              </Link>
+            }
+          />
+        )}
+        {empty === 'readyToHunt' && !hunt.running && (
+          <EmptyState title={t.empty.readyToHunt.title} body={t.empty.readyToHunt.body} />
         )}
         {empty === 'sampleReady' && !hunt.running && (
           <EmptyState title={t.empty.sampleReady.title} body={t.empty.sampleReady.body} />

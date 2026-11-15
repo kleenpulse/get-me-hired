@@ -7,7 +7,7 @@ import { useEffect, useId, useState } from 'react';
 import { emailedCount, type Contact, type Lead, type Person, type Signal } from '@/core/lead';
 import { nextStepFor } from '@/core/lifecycle';
 import { newGroupOf, type TodayReason } from '@/core/ranking';
-import { ageText, freshness, roundAgeText, shortDate, whyLine } from '@/app/format';
+import { ageText, freshness, roleText, roundAgeText, shortDate, whyLine } from '@/app/format';
 import { useApp } from '@/app/state';
 import { strings } from '@/app/strings';
 import { ContactLabelPill, FreshnessChip, TierChip } from './lead-parts';
@@ -231,7 +231,7 @@ export function LeadCard({ lead, reason, as = 'article', className }: LeadCardPr
         {typeof lead.likes === 'number' && <StatPill icon={ThumbsUp} value={lead.likes} name={t.facts.likes} />}
         {lead.likes === 'unknown' && <UnverifiedTag icon={ThumbsUp}>{t.facts.likesUnknown}</UnverifiedTag>}
         {lead.round && <StatPill icon={Banknote} value={lead.round} name={t.facts.round} />}
-        <StatPill icon={Briefcase} value={lead.role || t.facts.noRole} name={t.facts.role} />
+        <StatPill icon={Briefcase} value={roleText(lead)} name={t.facts.role} />
         <StatPill icon={MapPin} value={lead.location || strings.unknown} name={t.facts.location} />
       </div>
 

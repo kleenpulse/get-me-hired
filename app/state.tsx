@@ -12,10 +12,10 @@ import {
   type ReactNode,
 } from 'react';
 import { localDate } from '@/core/dates';
-import type { HuntProgress, HuntResult } from '@/core/hunt';
+import type { HuntProgress, HuntResult, HuntRunner } from '@/core/hunt';
 import type { Lead, LeadStatus } from '@/core/lead';
-import { cleanProfile, type Profile } from '@/core/profile';
-import { PROVIDER_IDS, type ProviderId } from '@/core/providers';
+import { cleanProfile, missingFields, type Profile } from '@/core/profile';
+import { PROVIDER_IDS, PROVIDERS, type ProviderId } from '@/core/providers';
 import {
   applyAutomaticMoves,
   markEmailed,
@@ -47,6 +47,8 @@ export interface HuntState {
   progress: HuntProgress | null;
   /** The outcome of the last hunt in this session, in words. */
   message: string | null;
+  /** True when that hunt stopped with a problem, so the message is shown as one. */
+  failed?: boolean;
 }
 
 interface Actions {
@@ -132,6 +134,18 @@ function replaceLead(data: AppData, key: string, change: (lead: Lead) => Lead): 
     return next;
   });
   return changed ? { ...data, leads } : data;
+}
+
+function providerName(provider: ProviderId | null): string {
+  return provider ? PROVIDERS[provider].name : strings.hunt.yourProvider;
+}
+
+/** The outcome of a hunt, in words. */
+function huntMessage(result: HuntResult, added: number, provider: ProviderId | null): string {
+  if (result.status === 'failed') return strings.hunt.failed(result.problem ?? 'unknown', providerName(provider), added);
+  if (result.status === 'cancelled') return strings.hunt.cancelled(result.leads.length);
+  const outcome = added === 0 ? strings.hunt.nothingNew : strings.hunt.finished(added);
+  return result.unread ? `${outcome} ${strings.hunt.unread(result.unread)}` : outcome;
 }
 
 /** Adds the leads a hunt found. A lead whose key already exists changes nothing (FR-6.8). */
@@ -251,39 +265,72 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const runHunt = useCallback(() => {
     // A second click while a hunt runs does nothing (AC-4.1).
     if (huntControl.current) return;
-    // Only the sample hunt exists so far. A real hunt will plug in here with the same shape.
-    if (!data.settings.sampleMode) return;
+    const { settings, profile, leads } = latest.current;
+    const sample = settings.sampleMode;
+    const provider = settings.provider;
+    const key = provider ? keys.current[provider] : undefined;
+    // A real hunt needs a provider with a saved key and a complete profile (FR-3.6).
+    if (!sample && (!provider || !key || !profile || missingFields(profile).length > 0)) return;
 
     const control = new AbortController();
     huntControl.current = control;
-    setHunt({ running: true, sample: true, progress: null, message: null });
+    setHunt({ running: true, sample, progress: null, message: null });
 
-    createSampleHunt(pause)({
-      now: new Date(),
-      signal: control.signal,
-      onProgress: (progress) => setHunt((current) => ({ ...current, progress })),
-    })
+    // The real hunt and the AI SDK load only now, so the first page load doesn't pay for them.
+    const runner: Promise<HuntRunner> =
+      sample || !provider || !key || !profile
+        ? Promise.resolve(createSampleHunt(pause))
+        : import('@/core/hn-hunt').then(({ createHnHunt }) =>
+            createHnHunt({
+              provider,
+              key,
+              profile,
+              fetch: window.fetch.bind(window),
+              knownKeys: new Set(leads.map((lead) => lead.key)),
+            }),
+          );
+
+    runner
+      .then((run) =>
+        run({
+          now: new Date(),
+          signal: control.signal,
+          onProgress: (progress) => setHunt((current) => ({ ...current, progress })),
+        }),
+      )
       .then((result) => {
         const finishedAt = new Date();
         const known = new Set(latest.current.leads.map((lead) => lead.key));
         const added = result.leads.filter((lead) => !known.has(lead.key)).length;
-        setData((current) => addFound(current, result, finishedAt, true));
+        setData((current) => addFound(current, result, finishedAt, sample));
         setHunt((current) => ({
           ...current,
           running: false,
           progress: { steps: result.steps, kept: result.leads.length, dropped: result.dropped.length },
-          message:
-            result.status === 'cancelled'
-              ? strings.hunt.cancelled(result.leads.length)
-              : result.leads.length === 0 || added === 0
-                ? strings.hunt.nothingNew
-                : strings.hunt.finished(added),
+          message: huntMessage(result, added, provider),
+          failed: result.status === 'failed',
+        }));
+      })
+      .catch(() => {
+        setHunt((current) => ({
+          ...current,
+          running: false,
+          failed: true,
+          message: strings.hunt.failed('unknown', providerName(provider), 0),
         }));
       })
       .finally(() => {
         huntControl.current = null;
       });
-  }, [data.settings.sampleMode]);
+  }, []);
+
+  // Closing the tab during a real hunt asks first (FRD §10.2). A sample hunt loses nothing.
+  useEffect(() => {
+    if (!hunt.running || hunt.sample) return;
+    const onUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [hunt.running, hunt.sample]);
 
   const actions = useMemo<Actions>(() => {
     const update = (key: string, change: (lead: Lead, moment: Date) => Lead) =>
