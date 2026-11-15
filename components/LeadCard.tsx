@@ -4,6 +4,7 @@
 
 import { Banknote, Briefcase, Check, Clock, Copy, Mail, MapPin, ThumbsUp } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
+import { personEntry } from '@/core/block';
 import { emailedCount, type Contact, type Lead, type Person, type Signal } from '@/core/lead';
 import { nextStepFor } from '@/core/lifecycle';
 import { PROVIDERS } from '@/core/providers';
@@ -127,6 +128,7 @@ function PersonBlock({ lead, person, index }: { lead: Lead; person: Person; inde
   const emailedOn = person.emailedOn[0];
   const step = lead.status === 'emailed' ? nextStepFor(person, data.settings.cadence) : null;
   const followupDue = step?.kind === 'followup' && step.dueOn <= today ? step : null;
+  const blockThem = personEntry(person.name, lead, today);
 
   return (
     <li className="flex flex-col gap-2.5 rounded-tile bg-glass p-3.5">
@@ -167,6 +169,19 @@ function PersonBlock({ lead, person, index }: { lead: Lead; person: Person; inde
           </>
         ) : (
           <Button onClick={() => actions.markEmailed(lead.key, index)}>{t.markEmailed}</Button>
+        )}
+        {/* FR-5.7: block this person at this company. It asks first, and can be undone under Data. */}
+        {blockThem && (
+          <Button
+            variant="quiet"
+            aria-label={t.dontContactFor(person.name)}
+            onClick={() => {
+              if (window.confirm(t.dontContactConfirm(person.name, lead.company))) actions.block([blockThem]);
+            }}
+            className="ml-auto text-ink-2"
+          >
+            {t.dontContact}
+          </Button>
         )}
       </div>
     </li>

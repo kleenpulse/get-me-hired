@@ -350,3 +350,26 @@ describe('judging one verdict', () => {
     expect(judged.kind === 'keep' && judged.lead.signals).toEqual(['pay-unknown']);
   });
 });
+
+describe('the do-not-contact list in a hunt (AC-5.7)', () => {
+  it('shows a lead on a blocked domain only under Dropped, with do-not-contact', async () => {
+    const result = await createRealHunt({
+      provider: 'gemini',
+      key: KEY,
+      profile: PROFILE,
+      fetch: standIn([]),
+      knownKeys: new Set(),
+      sources: { funding: false },
+      blockList: [{ kind: 'domain', value: 'quillstack.example', addedOn: '2026-11-15' }],
+    })({ now: NOW, signal: new AbortController().signal, onProgress: () => {} });
+
+    expect(result.leads.map((lead) => lead.company)).not.toContain('Quillstack');
+    expect(result.dropped).toContainEqual({
+      company: 'Quillstack',
+      reason: 'do-not-contact',
+      sourceUrl: commentUrl(String(COMMENTS.quillstack.id)),
+    });
+    // The drop holds the company and its source only, never a blocked person or address (§13).
+    expect(JSON.stringify(result.dropped)).not.toContain('ana@quillstack.example');
+  });
+});

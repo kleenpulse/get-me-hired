@@ -12,6 +12,7 @@
 // address and link from the file is checked again before it is kept, because a
 // backup is a file from outside, like any other.
 
+import { applyBlockList, blockEntryText, readBlockLine, sameEntry, type BlockEntry } from '@/core/block';
 import { isPlainEmail, isWebUrl } from '@/core/evidence';
 import { DROP_REASONS } from '@/core/hunt';
 import { SIGNALS, type Attention, type Contact, type Hook, type Lead, type LeadSource, type Person, type StatusChange } from '@/core/lead';
@@ -110,7 +111,7 @@ export function backupFiles(data: AppData): ZipFile[] {
       problem: run.problem ?? null,
       report_name: run.report && run.reportName ? run.reportName : null,
     })),
-    do_not_contact: [],
+    do_not_contact: data.doNotContact.map(blockEntryText),
   };
 
   const files: ZipFile[] = [];
@@ -141,6 +142,8 @@ export interface Incoming {
   settings: { dailyTarget: number; cadence: Cadence } | null;
   /** Rows the lenient reader marked "Needs review". */
   needsReview: number;
+  /** The backup's do-not-contact list, each line checked (FR-5.7). */
+  doNotContact: BlockEntry[];
 }
 
 export type ReadResult = { ok: true; incoming: Incoming } | { ok: false; problem: ImportProblem };
@@ -338,6 +341,7 @@ export async function readBackup(bytes: Uint8Array, inflate: Inflate): Promise<R
       runs: [...listed, ...loose].sort((a, b) => a.at.localeCompare(b.at)),
       settings: readSettings(extras.settings),
       needsReview,
+      doNotContact: Array.isArray(extras.do_not_contact) ? extras.do_not_contact.flatMap((line) => readBlockLine(line, '') ?? []) : [],
     },
   };
 }
@@ -349,6 +353,8 @@ export interface MergeSummary {
   profile: 'added' | 'replaced' | 'kept' | 'none';
   runsAdded: number;
   needsReview: number;
+  /** Leads left out because the do-not-contact list blocks their domain. */
+  blocked: number;
 }
 
 /**
@@ -380,6 +386,19 @@ export function mergeBackup(current: AppData, incoming: Incoming, replaceProfile
     });
   }
 
+  // The block list only grows on import: entries are added, never removed (FRD §13.2).
+  const doNotContact = [...current.doNotContact, ...incoming.doNotContact.filter((entry) => !current.doNotContact.some((known) => sameEntry(known, entry)))];
+  // Then it applies to every lead, the backup's included, so a blocked entry never comes back (FR-5.7).
+  let blocked = 0;
+  const leads = [...byKey.values()].flatMap((lead) => {
+    const result = applyBlockList(lead, doNotContact);
+    if (result.kind === 'drop') {
+      blocked += 1;
+      return [];
+    }
+    return [result.lead];
+  });
+
   const knownRuns = new Set(current.runs.map((run) => run.at));
   const newRuns = incoming.runs.filter((run) => !knownRuns.has(run.at));
   const fresh = current.leads.length === 0 && current.profile === null && current.runs.length === 0;
@@ -390,12 +409,13 @@ export function mergeBackup(current: AppData, incoming: Incoming, replaceProfile
     data: {
       ...current,
       profile: profile === 'added' || profile === 'replaced' ? incoming.profile : current.profile,
-      leads: [...byKey.values()],
+      leads,
+      doNotContact,
       runs: [...current.runs, ...newRuns].sort((a, b) => a.at.localeCompare(b.at)),
       // Settings come in only to a fresh browser, so a backup never quietly changes them.
       settings: fresh && incoming.settings ? { ...current.settings, ...incoming.settings } : current.settings,
     },
-    summary: { added, alreadyHere, profile, runsAdded: newRuns.length, needsReview: incoming.needsReview },
+    summary: { added, alreadyHere, profile, runsAdded: newRuns.length, needsReview: incoming.needsReview, blocked },
   };
 }
 

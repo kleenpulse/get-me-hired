@@ -19,7 +19,7 @@ function realData(): AppData {
   const leads = [...buildSamplePipeline(NOW), ...finds.posts, ...finds.funding, ...finds.community].map((lead) => ({
     ...lead,
     sample: false,
-    notes: lead.company === 'Quarry' ? 'Said to write again in January.' : '',
+    notes: lead.company === 'Quarry & Finch' ? 'Said to write again in January.' : '',
   }));
   const profile: Profile = {
     ...emptyProfile(),
@@ -64,7 +64,7 @@ describe('the backup (FR-9.2, AC-9.2)', () => {
     expect(restored.leads).toEqual(data.leads.filter((lead) => !lead.sample));
     expect(restored.profile).toEqual(data.profile);
     expect(restored.runs).toEqual(data.runs.filter((run) => !run.sample));
-    expect(summary).toEqual({ added: data.leads.length - 1, alreadyHere: 0, profile: 'added', runsAdded: 1, needsReview: 0 });
+    expect(summary).toEqual({ added: data.leads.length - 1, alreadyHere: 0, profile: 'added', runsAdded: 1, needsReview: 0, blocked: 0 });
   });
 
   it("writes the skill's files, with the leads.csv header exactly as FRD §11.2 says", async () => {
@@ -223,5 +223,39 @@ describe('a hostile backup', () => {
     const read = await readBackup(fromBase64(BY_HAND_ZIP), inflate);
     expect(read.ok).toBe(true);
     expect(wanted).toHaveLength(4);
+  });
+});
+
+describe('the do-not-contact list in a backup (FR-5.7)', () => {
+  const blocked: AppData['doNotContact'] = [
+    { kind: 'domain', value: 'quarryfinch.example', addedOn: '2026-11-14' },
+    { kind: 'email', value: 'someone@else.example', addedOn: '2026-11-14' },
+  ];
+
+  it('travels in the backup, and comes back', async () => {
+    const data = { ...realData(), doNotContact: blocked };
+    const read = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!read.ok) throw new Error('backup unreadable');
+    expect(read.incoming.doNotContact.map((entry) => entry.value)).toEqual(['quarryfinch.example', 'someone@else.example']);
+  });
+
+  it('only grows on import, and keeps a blocked lead out even when the backup holds it', async () => {
+    const read = await readBackup(backupZip(realData(), NOW), inflateRaw);
+    if (!read.ok) throw new Error('backup unreadable');
+    const here: AppData = { ...emptyData(), doNotContact: blocked };
+    const { data, summary } = mergeBackup(here, read.incoming, false);
+    expect(data.doNotContact).toEqual(blocked);
+    expect(data.leads.map((lead) => lead.company)).not.toContain('Quarry & Finch');
+    expect(summary.blocked).toBe(1);
+  });
+});
+
+describe('the round trip keeps notes', () => {
+  it('brings a note back exactly', async () => {
+    const data = realData();
+    expect(data.leads.some((lead) => lead.notes === 'Said to write again in January.')).toBe(true);
+    const read = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!read.ok) throw new Error('backup unreadable');
+    expect(read.incoming.leads.find((lead) => lead.company === 'Quarry & Finch')?.notes).toBe('Said to write again in January.');
   });
 });
