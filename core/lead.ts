@@ -116,6 +116,23 @@ export interface Lead {
   sample: boolean;
 }
 
+/** The longest a lead's notes can be (FR-6.7). Plenty for notes, and keeps one record small. */
+export const NOTES_MAX = 4000;
+
+/**
+ * Notes as stored: the user's own plain text (FR-6.7). Line breaks and tabs are
+ * kept, other control characters are dropped, trailing space is trimmed, and
+ * the length is capped. They're never shown as HTML or Markdown, and never sent
+ * with a hunt.
+ */
+export function cleanNotes(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .slice(0, NOTES_MAX)
+    .trimEnd();
+}
+
 /** The name that stands in for the people retention removed from a closed lead (FR-9.7, app/retention.ts). */
 export const REMOVED = '(removed)';
 

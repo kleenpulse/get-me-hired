@@ -16,7 +16,7 @@ import { sameEntry, type BlockEntry } from '@/core/block';
 import { spentThisMonth } from '@/core/budget';
 import { localDate } from '@/core/dates';
 import { waitingSteps, type HuntProgress, type HuntResult, type HuntRunner, type HuntStep } from '@/core/hunt';
-import type { Lead, LeadStatus, StatusChange } from '@/core/lead';
+import { cleanNotes, type Lead, type LeadStatus, type StatusChange } from '@/core/lead';
 import { cleanProfile, missingFields, type Profile } from '@/core/profile';
 import { classifyProviderError, PROVIDER_IDS, PROVIDERS, type ProviderId } from '@/core/providers';
 import {
@@ -86,6 +86,8 @@ interface Actions {
    * (FR-6.12). Returns what Undo needs, or null when nothing moved.
    */
   setStatus: (key: string, status: LeadStatus, options?: SetStatusOptions) => MoveRecord | null;
+  /** Saves the user's notes on a lead (FR-6.7), cleaned and capped. They never go into a hunt. */
+  setNotes: (key: string, notes: string) => void;
   /** Undoes a move within its 10 seconds (FR-6.13). False when the lead changed since, so it can't. */
   undoStatus: (move: MoveRecord) => boolean;
   /** Saves the profile, cleaned first, so what is saved is what `profile.md` can carry. */
@@ -691,6 +693,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markEmailed: (key, personIndex) =>
         update(key, (lead, moment) => markEmailed(lead, personIndex, localDate(moment), moment)),
       unmarkEmailed: (key, personIndex) => update(key, (lead, moment) => unmarkEmailed(lead, personIndex, moment)),
+      setNotes: (key, notes) => update(key, (lead) => (lead.notes === cleanNotes(notes) ? lead : { ...lead, notes: cleanNotes(notes) })),
       markFollowupSent: (key, personIndex) =>
         update(key, (lead, moment) => markFollowupSent(lead, personIndex, localDate(moment))),
       setStatus: (key, status, options) => {

@@ -104,7 +104,7 @@ describe('when a closed lead closed (FR-9.7)', () => {
 
 describe('retention (FR-9.7, FRD §13.2)', () => {
   it("replaces a closed lead's people with one (removed), and scrubs them from reports", () => {
-    const old = lead('Tidewell', 'no-reply', '2026-05-01');
+    const old = lead('Tidewell', 'no-reply', '2026-05-01', { notes: 'My own note: liked their blog.' });
     const after = applyRetention(withLeads([old], [run('2026-10-01')]), TODAY, DAYS);
     const kept = after.leads[0]!;
     expect(kept.people).toEqual([{ name: REMOVED, role: '', contacts: [], emailedOn: [], followupsSent: [] }]);
@@ -112,6 +112,8 @@ describe('retention (FR-9.7, FRD §13.2)', () => {
     expect(kept.company).toBe('Tidewell');
     expect(kept.status).toBe('no-reply');
     expect(kept.hooks.map((hook) => hook.text)).toEqual(['They ship weekly.']);
+    // The user's own notes stay (FR-6.7).
+    expect(kept.notes).toBe('My own note: liked their blog.');
     const report = after.runs[0]?.report ?? '';
     expect(report).not.toMatch(/Ana Lima|Bo Chen|@tidewell\.example/);
     expect(report).toContain('### Tidewell: Frontend Engineer');

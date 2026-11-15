@@ -15,7 +15,7 @@
 import { applyBlockList, blockEntryText, readBlockLine, sameEntry, type BlockEntry } from '@/core/block';
 import { isPlainEmail, isWebUrl } from '@/core/evidence';
 import { DROP_REASONS } from '@/core/hunt';
-import { SIGNALS, type Attention, type Contact, type Hook, type Lead, type LeadSource, type Person, type StatusChange } from '@/core/lead';
+import { cleanNotes, SIGNALS, type Attention, type Contact, type Hook, type Lead, type LeadSource, type Person, type StatusChange } from '@/core/lead';
 import { normaliseUrl } from '@/core/lead-key';
 import { leadToRow, rowToLead } from '@/core/lead-row';
 import { LEAD_STATUSES, parseLeadsCsv, writeLeadsCsv } from '@/core/leads-csv';
@@ -220,7 +220,8 @@ function withExtras(lead: Lead, extras: unknown): Lead {
     tier,
     statusHistory: history.length > 0 ? history : lead.statusHistory,
     snoozeUntil: isDay(extras.snooze_until) ? extras.snooze_until : null,
-    notes: isString(extras.notes) ? extras.notes : lead.notes,
+    // The user's own text, cleaned and capped as when typed (FR-6.7).
+    notes: isString(extras.notes) ? cleanNotes(extras.notes) : lead.notes,
     about: isString(extras.about) ? extras.about : lead.about,
     location: isString(extras.location) ? extras.location : lead.location,
     hooks,

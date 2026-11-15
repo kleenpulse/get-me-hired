@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOMB_ZIP, BY_HAND_ZIP, NEWER_ZIP } from '@/fixtures/backup-zips';
 import { LEADS_CSV_HEADER } from '@/core/leads-csv';
+import { NOTES_MAX } from '@/core/lead';
 import { emptyProfile, type Profile } from '@/core/profile';
 import { buildSampleFinds, buildSamplePipeline } from '@/core/sample-leads';
 import { readZip, writeZip } from '@/core/zip';
@@ -257,6 +258,19 @@ describe('the round trip keeps notes', () => {
     const read = await readBackup(backupZip(data, NOW), inflateRaw);
     if (!read.ok) throw new Error('backup unreadable');
     expect(read.incoming.leads.find((lead) => lead.company === 'Quarry & Finch')?.notes).toBe('Said to write again in January.');
+  });
+});
+
+describe('notes in a backup (FR-6.7)', () => {
+  it('come in cleaned and capped, like typed notes', async () => {
+    const data = realData();
+    const lead = data.leads[0]!;
+    data.leads[0] = { ...lead, notes: `ok${'x'.repeat(NOTES_MAX + 10)}` };
+    const result = await readBackup(backupZip(data, NOW), inflateRaw);
+    if (!result.ok) throw new Error('backup unreadable');
+    const notes = result.incoming.leads.find((entry) => entry.key === lead.key)?.notes ?? '';
+    expect(notes).toHaveLength(NOTES_MAX);
+    expect(notes.startsWith('okx')).toBe(true);
   });
 });
 
