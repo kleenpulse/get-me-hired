@@ -27,7 +27,14 @@ const GEMINI_OK = {
 const GEMINI_BAD_KEY = {
   error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' },
 };
-const GEMINI_QUOTA = { error: { code: 429, message: 'Resource has been exhausted (e.g. check quota).', status: 'RESOURCE_EXHAUSTED' } };
+// Gemini's free tier words its per-minute limit like this. "billing" in it must not read as "no credit".
+const GEMINI_QUOTA = {
+  error: {
+    code: 429,
+    message: 'You exceeded your current quota, please check your plan and billing details.',
+    status: 'RESOURCE_EXHAUSTED',
+  },
+};
 const OPENROUTER_OK = {
   id: 'gen-1',
   object: 'chat.completion',
@@ -111,11 +118,36 @@ describe('testing a key (FR-2.4, AC-2.4)', () => {
   });
 });
 
+describe('what each provider can do (AC-2.2)', () => {
+  // Every check FRD §19 records as confirmed with a real key. Anything else must not
+  // be shown as working (principle 2). Add to this list only with a §19 entry.
+  const CONFIRMED: string[] = [
+    'gemini.browser',
+    'gemini.structured',
+    'openrouter.browser',
+    'openrouter.structured',
+    'openrouter.search', // openai/gpt-6-luna found the HN thread, $0.011
+  ];
+
+  it('shows a check as working only when FRD §19 confirms it', () => {
+    for (const info of Object.values(PROVIDERS)) {
+      for (const [check, result] of Object.entries(info.checks)) {
+        if (result === 'yes' || result === 'paid') expect(CONFIRMED).toContain(`${info.id}.${check}`);
+      }
+    }
+  });
+
+  it('does not claim Gemini search works with billing on, which is untested', () => {
+    expect(PROVIDERS.gemini.checks.search).toBe('paid-untested');
+    expect(PROVIDERS.openrouter.checks.search).toBe('paid');
+  });
+});
+
 describe('reading provider errors', () => {
   const cases: [string, unknown, KeyProblem][] = [
     ['401', { name: 'AI_APICallError', statusCode: 401, responseBody: 'No auth credentials found' }, 'wrong-key'],
     ['403', { name: 'AI_APICallError', statusCode: 403, responseBody: 'PERMISSION_DENIED' }, 'wrong-key'],
-    ['429 that is about money', { statusCode: 429, responseBody: 'Your credit balance is too low' }, 'no-credit'],
+    ['429 that mentions billing', { statusCode: 429, responseBody: 'check your plan and billing details' }, 'rate-limited'],
     ['404 model', { statusCode: 404, responseBody: 'No endpoints found for this model' }, 'missing-capability'],
     ['500', { statusCode: 500, responseBody: 'internal' }, 'provider-down'],
     ['a timeout', { name: 'TimeoutError', message: 'signal timed out' }, 'timeout'],

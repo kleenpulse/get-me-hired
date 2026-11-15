@@ -5,7 +5,7 @@
 import type { DropReason, HuntStepId } from '@/core/hunt';
 import type { Attention, ContactLabel, LeadStatus, Signal, Tier } from '@/core/lead';
 import type { RemotePreference, RequiredField } from '@/core/profile';
-import type { KeyProblem, ProviderId } from '@/core/providers';
+import type { CheckResult, KeyProblem, ProviderChecks, ProviderId } from '@/core/providers';
 import type { NewGroup, TodayGroup } from '@/core/ranking';
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
@@ -48,13 +48,35 @@ export const strings = {
       none: 'No provider is connected yet.',
       listLabel: 'Choose a provider',
       about: {
-        gemini: 'Recommended. Has a free tier.',
-        openrouter: 'Many models, some of them free.',
+        gemini: 'Recommended. Free, but web search needs billing on.',
+        openrouter: 'Many models, some free. Web search costs credit.',
         anthropic: 'Coming later',
         openai: 'Coming later',
       } satisfies Record<ProviderId, string>,
       keySaved: 'Key saved',
       inUse: 'In use',
+      checks: {
+        title: 'What it can do',
+        names: {
+          browser: 'Works straight from this browser',
+          structured: 'Returns lead data the app can check',
+          search: 'Searches the web for fresh posts',
+        } satisfies Record<keyof ProviderChecks, string>,
+        results: {
+          yes: 'Yes',
+          paid: 'Paid only',
+          'paid-untested': 'Needs billing. Not checked yet',
+          untested: 'Not checked yet',
+        } satisfies Record<CheckResult, string>,
+        searchNote: {
+          gemini:
+            "Gemini's free tier has no web search. Google says it needs billing turned on, with 5,000 searches a month free, then a charge. We haven't tested it with billing on yet. Without search, hunts still read Hacker News and funding news, but cannot find fresh LinkedIn or X posts.",
+          openrouter:
+            'Each web search costs about 1 cent of OpenRouter credit. Without credit, hunts still read Hacker News and funding news, but cannot find fresh LinkedIn or X posts.',
+          anthropic: '',
+          openai: '',
+        } satisfies Record<ProviderId, string>,
+      },
       notOffered: (names: readonly string[]) =>
         `${listWords(names)} ${names.length === 1 ? 'is' : 'are'} not offered yet. We have not confirmed that ${names.length === 1 ? 'it works' : 'they work'} from a browser with a real key.`,
     },

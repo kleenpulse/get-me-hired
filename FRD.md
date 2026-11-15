@@ -618,9 +618,9 @@ The welcome screen and the Data screen show: "You decide how to use these contac
    | Check | Result |
    |---|---|
    | (a) Browser calls | A real call answered. Error answers are readable too, including "not enough credit". |
-   | (b) Structured output | Right on all 4 models tried: `anthropic/claude-haiku-5.5`, `openai/gpt-6-luna` and 2 free models. Each one ignored an instruction planted in the page text (NFR-4). On the paid models, reading one post cost $0.0001 to $0.00016. |
+   | (b) Structured output | Right on all 4 models tried: `anthropic/claude-haiku-5.5`, `openai/gpt-6-luna` and 2 free models (`nvidia/nemotron-3.5-super-vl:free` and `inclusionai/ling-3.2-flash:free`; the ids come from the spike's run output, which is not kept in the repo, and the second passed a real-key test again on 2026-11-15). Each one ignored an instruction planted in the page text (NFR-4). On the paid models, reading one post cost $0.0001 to $0.00016. |
    | (c) Web search | `openai/gpt-6-luna` found the current HN "Who is hiring?" thread. That one search cost $0.011, of which $0.01 was the search fee. |
-   | (c) Page reading | OpenRouter's web fetch tool read the thread's page on 2 free models, with its free `openrouter` engine. Cost: $0. |
+   | (c) Page reading | OpenRouter's web fetch tool read the thread's page on the same 2 free models, with its free `openrouter` engine. Cost: $0. |
 
    Not measured yet: Google models (the account ran out of credit first), Claude with search, and the cost and yield of a whole hunt (question 2).
 

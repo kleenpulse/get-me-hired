@@ -8,13 +8,22 @@
 
 import { Check, ClipboardPaste, ExternalLink, Eye, EyeOff, TriangleAlert } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
-import { PROVIDER_IDS, PROVIDERS, testProviderKey, type KeyProblem, type ProviderId } from '@/core/providers';
+import {
+  PROVIDER_IDS,
+  PROVIDERS,
+  testProviderKey,
+  type KeyProblem,
+  type ProviderChecks,
+  type ProviderId,
+} from '@/core/providers';
 import { INPUT } from '@/components/fields';
 import { Banner, Button, Card, cx, IconButton, StatusPill } from '@/components/ui';
 import { useApp } from '../state';
 import { strings } from '../strings';
 
 const t = strings.settings;
+const c = t.provider.checks;
+const CHECK_ORDER: (keyof ProviderChecks)[] = ['browser', 'structured', 'search'];
 
 type Outcome =
   | { kind: 'connected' }
@@ -91,6 +100,11 @@ function KeyCard({ id }: { id: ProviderId }) {
   const control = useRef<AbortController | null>(null);
   const hasKey = keyProviders.includes(id);
   const canPaste = typeof navigator.clipboard?.readText === 'function';
+  // A password field makes browsers offer to save the key in their password manager, which
+  // can sync it to the cloud (NFR-3). So the field is plain text, with its letters drawn as
+  // dots. Only a browser that can't draw them as dots gets a password field instead.
+  const canMask = typeof CSS !== 'undefined' && CSS.supports('-webkit-text-security', 'disc');
+  const inputType = shown || canMask ? 'text' : 'password';
 
   // Leaving the screen, or picking another provider, stops a test in flight.
   useEffect(() => () => control.current?.abort(), []);
@@ -163,6 +177,22 @@ function KeyCard({ id }: { id: ProviderId }) {
         {hasKey && <StatusPill dot>{t.provider.keySaved}</StatusPill>}
       </div>
 
+      {/* The FR-2.2 check results, so the user knows before getting a key (AC-2.2, D13). */}
+      <section aria-labelledby="checks-title" className="flex flex-col gap-2">
+        <h3 id="checks-title" className="text-ink-2 type-caption">
+          {c.title}
+        </h3>
+        <dl className="flex flex-col gap-1">
+          {CHECK_ORDER.map((check) => (
+            <div key={check} className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <dt className="type-body">{c.names[check]}</dt>
+              <dd className="type-label">{c.results[info.checks[check]]}</dd>
+            </div>
+          ))}
+        </dl>
+        {c.searchNote[id] && <p className="max-w-[68ch] text-ink-2 type-caption">{c.searchNote[id]}</p>}
+      </section>
+
       <ol className="flex list-decimal flex-col gap-1.5 pl-5 type-body">
         {k.steps[id].map((step) => (
           <li key={step}>{step}</li>
@@ -190,7 +220,7 @@ function KeyCard({ id }: { id: ProviderId }) {
           <input
             id={inputId}
             name="key"
-            type={shown ? 'text' : 'password'}
+            type={inputType}
             value={key}
             onChange={(event) => {
               setKey(event.target.value);
@@ -201,7 +231,9 @@ function KeyCard({ id }: { id: ProviderId }) {
             autoCorrect="off"
             spellCheck={false}
             aria-describedby={`${inputId}-note`}
-            className={cx(INPUT, 'type-data')}
+            data-1p-ignore
+            data-lpignore="true"
+            className={cx(INPUT, 'type-data', !shown && canMask && '[-webkit-text-security:disc]')}
           />
           <IconButton icon={shown ? EyeOff : Eye} label={shown ? k.hide : k.show} onClick={() => setShown(!shown)} />
         </div>

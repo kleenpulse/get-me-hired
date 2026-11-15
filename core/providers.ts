@@ -21,7 +21,29 @@ export interface ProviderInfo {
   model: string;
   /** Where the user creates a key. */
   keyUrl: string;
+  /** What the spike found for the three checks in FR-2.2, shown with the provider (AC-2.2). */
+  checks: ProviderChecks;
 }
+
+/**
+ * Only what FRD §19 records as confirmed with a real key may be `yes` or `paid`
+ * (principle 2: never show an unchecked fact as checked).
+ * `yes`: confirmed with a real key. `paid`: confirmed, and works only on a paid
+ * plan or with credit. `paid-untested`: the provider says it needs a paid plan,
+ * and nobody has tried it on one yet. `untested`: not confirmed with a real key.
+ */
+export type CheckResult = 'yes' | 'paid' | 'paid-untested' | 'untested';
+
+export interface ProviderChecks {
+  /** FR-2.2 (a): it answers calls made straight from a browser page. */
+  browser: CheckResult;
+  /** FR-2.2 (b): it returns lead data as JSON the app can check. */
+  structured: CheckResult;
+  /** FR-2.2 (c): it can search the web, which fresh LinkedIn and X posts need. */
+  search: CheckResult;
+}
+
+const UNTESTED: ProviderChecks = { browser: 'untested', structured: 'untested', search: 'untested' };
 
 export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
   gemini: {
@@ -31,6 +53,8 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
     // The default provider and model (FRD D13): free on Gemini's free tier.
     model: 'gemini-3.1-flash-lite',
     keyUrl: 'https://aistudio.google.com/apikey',
+    // Search is refused on the free tier, and is untested with billing on (FRD §19, D13).
+    checks: { browser: 'yes', structured: 'yes', search: 'paid-untested' },
   },
   openrouter: {
     id: 'openrouter',
@@ -40,6 +64,8 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
     // Free models come and go: check it still exists before relying on it.
     model: 'inclusionai/ling-3.2-flash:free',
     keyUrl: 'https://openrouter.ai/settings/keys',
+    // Search worked on a paid model, for about 1 cent a search (FRD §19).
+    checks: { browser: 'yes', structured: 'yes', search: 'paid' },
   },
   anthropic: {
     id: 'anthropic',
@@ -47,6 +73,7 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
     status: 'unconfirmed',
     model: 'claude-haiku-5-5',
     keyUrl: 'https://console.anthropic.com/settings/keys',
+    checks: UNTESTED,
   },
   openai: {
     id: 'openai',
@@ -54,6 +81,7 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
     status: 'unconfirmed',
     model: 'gpt-6-luna',
     keyUrl: 'https://platform.openai.com/api-keys',
+    checks: UNTESTED,
   },
 };
 
@@ -110,7 +138,9 @@ export function classifyProviderError(error: unknown): KeyProblem {
   }
   if (status === 401 || status === 403) return 'wrong-key';
   if (status === 402) return 'no-credit';
-  if (status === 429) return /credit|billing|balance/.test(text) ? 'no-credit' : 'rate-limited';
+  // A 429 is always "slow down". Gemini's free tier says "check your plan and billing
+  // details" in it, but the key works. Running out of credit is a 402 (OpenRouter).
+  if (status === 429) return 'rate-limited';
   // Gemini answers a bad key with 400 and these words.
   if (status === 400 && /api key|api_key_invalid|unauthenticated|permission/.test(text)) return 'wrong-key';
   if (status === 400 && /credit|billing/.test(text)) return 'no-credit';
