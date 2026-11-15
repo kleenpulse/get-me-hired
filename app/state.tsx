@@ -14,7 +14,7 @@ import {
 import { sameEntry, type BlockEntry } from '@/core/block';
 import { localDate } from '@/core/dates';
 import { waitingSteps, type HuntProgress, type HuntResult, type HuntRunner, type HuntStep } from '@/core/hunt';
-import type { Lead, LeadStatus } from '@/core/lead';
+import type { Lead, LeadStatus, StatusChange } from '@/core/lead';
 import { cleanProfile, missingFields, type Profile } from '@/core/profile';
 import { classifyProviderError, PROVIDER_IDS, PROVIDERS, type ProviderId } from '@/core/providers';
 import {
@@ -22,7 +22,9 @@ import {
   markEmailed,
   markFollowupSent,
   setStatus,
+  undoStatus,
   unmarkEmailed,
+  type SetStatusOptions,
 } from '@/core/lifecycle';
 import { createSampleHunt, type Pause } from '@/core/sample-hunt';
 import { buildSamplePipeline } from '@/core/sample-leads';
@@ -65,7 +67,13 @@ interface Actions {
   markEmailed: (key: string, personIndex: number) => void;
   unmarkEmailed: (key: string, personIndex: number) => void;
   markFollowupSent: (key: string, personIndex: number) => void;
-  setStatus: (key: string, status: LeadStatus) => void;
+  /**
+   * A manual move (§8.2 rule 5). For "not-now", `snoozeUntil` is the return date
+   * (FR-6.12). Returns what Undo needs, or null when nothing moved.
+   */
+  setStatus: (key: string, status: LeadStatus, options?: SetStatusOptions) => MoveRecord | null;
+  /** Undoes a move within its 10 seconds (FR-6.13). False when the lead changed since, so it can't. */
+  undoStatus: (move: MoveRecord) => boolean;
   /** Saves the profile, cleaned first, so what is saved is what `profile.md` can carry. */
   saveProfile: (profile: Profile) => void;
   /** Runs the app in memory only, after the browser refused to store data. */
@@ -88,6 +96,15 @@ interface Actions {
   /** Deletes a key from storage at once (AC-10.1). Rejects if storage fails. */
   removeKey: (provider: ProviderId) => Promise<void>;
   deleteEverything: () => Promise<void>;
+}
+
+/** What Undo needs about one move (FR-6.13). */
+export interface MoveRecord {
+  key: string;
+  /** The lead as it was before the move. */
+  before: Lead;
+  /** The move's own history entry. */
+  entry: StatusChange;
 }
 
 export interface AppState {
@@ -253,7 +270,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // The two moves the app makes on its own (FRD §8.2 rule 6), on open and when the date changes.
+  // The two moves the app makes on its own (FRD §8.2 rule 6): on open, when the date changes,
+  // and when the follow-up rules change, so a confirmed new cadence closes those leads at once.
   useEffect(() => {
     if (!ready) return;
     setData((current) => {
@@ -266,7 +284,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       return changed ? { ...current, leads } : current;
     });
-  }, [ready, today]);
+  }, [ready, today, data.settings.cadence]);
 
   // Theme and text size follow the settings. The fast copy is kept only when saving is on (display.ts).
   const display = data.settings.display;
@@ -410,7 +428,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unmarkEmailed: (key, personIndex) => update(key, (lead, moment) => unmarkEmailed(lead, personIndex, moment)),
       markFollowupSent: (key, personIndex) =>
         update(key, (lead, moment) => markFollowupSent(lead, personIndex, localDate(moment))),
-      setStatus: (key, status) => update(key, (lead, moment) => setStatus(lead, status, localDate(moment), moment)),
+      setStatus: (key, status, options) => {
+        const before = latest.current.leads.find((lead) => lead.key === key) ?? null;
+        if (!before || before.status === status) return null;
+        // One moment for the move, so Undo can find the move's own history entry.
+        const moment = new Date();
+        setData((current) => replaceLead(current, key, (lead) => setStatus(lead, status, localDate(moment), moment, options)));
+        return { key, before, entry: { status, at: moment.toISOString() } };
+      },
+
+      undoStatus: (move) => {
+        const now = latest.current.leads.find((lead) => lead.key === move.key);
+        if (!now || !undoStatus(now, move.before, move.entry)) return false;
+        setData((current) => replaceLead(current, move.key, (lead) => undoStatus(lead, move.before, move.entry) ?? lead));
+        return true;
+      },
 
       saveProfile: (profile) => setData((current) => ({ ...current, profile: cleanProfile(profile) })),
 

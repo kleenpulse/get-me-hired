@@ -1,16 +1,20 @@
 // The Board (FR-6.3): every lead by status. On wide screens the statuses are
 // columns side by side. Under 768px they stack into a list grouped by status
 // (FR-6.14). Leads move with a "Move to" menu, which works by keyboard and on
-// phones. Drag-and-drop comes later, on top of the same menu.
+// phones. Drag-and-drop comes later, on top of the same menu. Not now asks for
+// a return date (FR-6.12), and every move can be undone for 10 seconds (FR-6.13).
 
-import { useState } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
+import { addDays } from '@/core/dates';
 import { emailedCount, type Lead, type LeadStatus } from '@/core/lead';
 import { LeadPanel } from '@/components/LeadPanel';
 import { TierChip } from '@/components/lead-parts';
-import { Card, EmptyState, Tag } from '@/components/ui';
+import { Button, Card, EmptyState, Tag } from '@/components/ui';
+import { INPUT } from '@/components/fields';
+import { UndoToast } from '@/components/UndoToast';
 import { roleText } from '../format';
 import { Link } from '../router';
-import { useApp } from '../state';
+import { useApp, type MoveRecord } from '../state';
 import { strings } from '../strings';
 
 const t = strings.board;
@@ -67,7 +71,7 @@ function Tile({ lead, onOpen, onMove }: { lead: Lead; onOpen: () => void; onMove
 }
 
 export function Board() {
-  const { data, actions } = useApp();
+  const { data, today, actions } = useApp();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const open = data.leads.find((lead) => lead.key === openKey) ?? null;
@@ -77,11 +81,40 @@ export function Board() {
     leads: data.leads.filter((lead) => lead.status === status),
   })).filter((column) => MAIN_STATUSES.includes(column.status) || column.leads.length > 0);
 
-  const move = (lead: Lead, status: LeadStatus) => {
-    if (status === lead.status) return;
-    actions.setStatus(lead.key, status);
+  const [lastMove, setLastMove] = useState<{ record: MoveRecord; company: string; status: LeadStatus } | null>(null);
+  const [notNowFor, setNotNowFor] = useState<Lead | null>(null);
+  const [returnOn, setReturnOn] = useState('');
+  const dialog = useRef<HTMLDialogElement>(null);
+  const dateId = useId();
+  const tomorrow = addDays(today, 1);
+
+  const moved = (lead: Lead, status: LeadStatus, snoozeUntil?: string) => {
+    const record = actions.setStatus(lead.key, status, snoozeUntil ? { snoozeUntil } : undefined);
+    if (!record) return;
+    setLastMove({ record, company: lead.company, status });
     setAnnouncement(t.moved(lead.company, strings.statuses[status]));
   };
+
+  const move = (lead: Lead, status: LeadStatus) => {
+    if (status === lead.status) return;
+    // Not now asks for a return date first. Cancelling changes nothing (FR-6.12).
+    if (status === 'not-now') {
+      setNotNowFor(lead);
+      setReturnOn(addDays(today, 30));
+      dialog.current?.showModal();
+      return;
+    }
+    moved(lead, status);
+  };
+
+  const undo = () => {
+    if (!lastMove) return;
+    const before = strings.statuses[lastMove.record.before.status];
+    setAnnouncement(actions.undoStatus(lastMove.record) ? t.undone(lastMove.company, before) : t.cantUndo(lastMove.company));
+    setLastMove(null);
+  };
+  const closeToast = useCallback(() => setLastMove(null), []);
+  const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(returnOn) && returnOn >= tomorrow;
 
   return (
     <div className="flex flex-col gap-gutter">
@@ -133,6 +166,62 @@ export function Board() {
       )}
 
       {open && <LeadPanel key={open.key} lead={open} onClose={() => setOpenKey(null)} />}
+
+      {lastMove && (
+        <UndoToast
+          // A new toast for each move, with its own 10 seconds.
+          key={lastMove.record.entry.at}
+          message={t.moved(lastMove.company, strings.statuses[lastMove.status])}
+          undoLabel={t.undo}
+          dismissLabel={t.dismiss}
+          onUndo={undo}
+          onClose={closeToast}
+        />
+      )}
+
+      <dialog
+        ref={dialog}
+        aria-labelledby="not-now-title"
+        onClose={() => setNotNowFor(null)}
+        className="m-auto w-[min(440px,calc(100vw-2*var(--gutter)))] rounded-card border border-hairline bg-sheet p-card text-foreground elev-overlay"
+      >
+        {notNowFor && (
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!dateOk) return;
+              moved(notNowFor, 'not-now', returnOn);
+              dialog.current?.close();
+            }}
+          >
+            <h2 id="not-now-title" className="type-title">
+              {t.notNow.title(notNowFor.company)}
+            </h2>
+            <p className="max-w-[68ch] type-body">{t.notNow.body}</p>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={dateId} className="type-label">
+                {t.notNow.date}
+              </label>
+              <input
+                id={dateId}
+                type="date"
+                min={tomorrow}
+                value={returnOn}
+                onChange={(event) => setReturnOn(event.target.value)}
+                required
+                className={INPUT}
+              />
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button onClick={() => dialog.current?.close()}>{t.notNow.cancel}</Button>
+              <Button type="submit" variant="primary" disabled={!dateOk}>
+                {t.notNow.confirm}
+              </Button>
+            </div>
+          </form>
+        )}
+      </dialog>
     </div>
   );
 }

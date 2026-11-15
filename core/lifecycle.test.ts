@@ -11,6 +11,7 @@ import {
   nextActionOn,
   nextStepFor,
   setStatus,
+  undoStatus,
   unmarkEmailed,
 } from './lifecycle';
 
@@ -267,5 +268,59 @@ describe('what a new cadence would do today', () => {
     const today = localDate(now);
     expect(closedByCadence(leads, today, now, { followupDelays: [5, 7], closeAfter: 7 })).toBe(0);
     expect(closedByCadence(leads, today, now, { followupDelays: [], closeAfter: 3 })).toBe(1);
+  });
+});
+
+describe('undoing a move (FR-6.13)', () => {
+  const later = new Date('2026-11-16T10:00:00Z');
+  const moveAt = (before: Lead, status: Lead['status'], moment: Date, options = {}) => ({
+    after: setStatus(before, status, '2026-11-16', moment, options),
+    entry: { status, at: moment.toISOString() },
+  });
+
+  it('puts the status, return date and flag back, and takes the move off the history', () => {
+    const before = lead({ status: 'emailed', statusHistory: [{ status: 'emailed', at: NOW.toISOString() }] });
+    const { after, entry } = moveAt(before, 'not-now', later, { snoozeUntil: '2026-12-01' });
+    const undone = undoStatus(after, before, entry);
+    expect(undone).toMatchObject({ status: 'emailed', snoozeUntil: null, attention: null });
+    expect(undone?.statusHistory).toEqual(before.statusHistory);
+  });
+
+  it('keeps what else changed in the meantime, such as a person marked emailed', () => {
+    const before = lead();
+    const { after, entry } = moveAt(before, 'replied', later);
+    const marked = { ...after, people: [person({ emailedOn: ['2026-11-16'] })] };
+    const undone = undoStatus(marked, before, entry);
+    // Someone is emailed now, so by §8.2 rule 1 the lead lands on emailed, not new.
+    expect(undone?.status).toBe('emailed');
+    expect(undone?.people[0]?.emailedOn).toEqual(['2026-11-16']);
+  });
+
+  it('refuses once the lead has moved again', () => {
+    const before = lead();
+    const { after, entry } = moveAt(before, 'replied', later);
+    const again = setStatus(after, 'call', '2026-11-16', new Date('2026-11-16T10:00:05Z'));
+    expect(undoStatus(again, before, entry)).toBeNull();
+  });
+
+  it('refuses when the last entry is not this move, even with the same status', () => {
+    const before = lead();
+    const { after } = moveAt(before, 'replied', later);
+    expect(undoStatus(after, before, { status: 'replied', at: '2026-11-16T11:00:00.000Z' })).toBeNull();
+  });
+});
+
+describe('undoing a move after an email was marked (§8.2 rule 1)', () => {
+  it('lands on emailed, not new, and keeps the mark', () => {
+    const before = lead();
+    const moment = new Date('2026-11-16T10:00:00Z');
+    const skipped = setStatus(before, 'skip', '2026-11-16', moment);
+    // Marking someone emailed doesn't move a Skip lead, so the move is still the last change.
+    const marked = markEmailed(skipped, 0, '2026-11-16', new Date('2026-11-16T10:00:03Z'));
+    expect(marked.status).toBe('skip');
+    const undone = undoStatus(marked, before, { status: 'skip', at: moment.toISOString() });
+    expect(undone?.status).toBe('emailed');
+    expect(undone?.people[0]?.emailedOn).toEqual(['2026-11-16']);
+    expect(undone?.statusHistory.map((change) => change.status)).toEqual(['new', 'emailed']);
   });
 });
