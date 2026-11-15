@@ -15,17 +15,17 @@
 // Fresh posts and funding news need web search or a page reader, so those steps
 // are marked as skipped, not as done.
 //
-// This module builds its schema after `loadSdk()`, and the app loads it with a
-// dynamic import: Zod must be set up before any schema exists (see providers.ts).
+// It runs as a stage of real-hunt.ts, which sets up Zod before this module
+// builds its schema (see loadSdk in providers.ts).
 
 import { localDate } from './dates';
 import { findEmails, firstWebUrl, isQuoted, isWebUrl } from './evidence';
 import { commentUrl, loadHiringThread, profileWords, shortlist, type HnComment } from './hn';
-import { waitingSteps, type DroppedLead, type DropReason, type HuntResult, type HuntRunner, type HuntStep, type HuntStepId } from './hunt';
+import type { DroppedLead, DropReason } from './hunt';
 import type { Lead, Person, Signal } from './lead';
 import { leadKey } from './lead-key';
 import type { Profile } from './profile';
-import { classifyProviderError, loadModel, loadSdk, type ProviderId } from './providers';
+import { stopsTheHunt, type StageContext, type StageEnd } from './real-hunt';
 import { computeTier } from './ranking';
 
 /** Comments per model call. The spike used 8 (FRD §19). */
@@ -56,15 +56,6 @@ export interface Verdict {
   evidence: string;
   fit: string;
   hook: string;
-}
-
-export interface HnHuntSettings {
-  provider: ProviderId;
-  key: string;
-  profile: Profile;
-  fetch: typeof globalThis.fetch;
-  /** Keys of leads already saved, so a known opening is reported as a duplicate. */
-  knownKeys: ReadonlySet<string>;
 }
 
 const REMOTE_WORDS = {
@@ -234,121 +225,85 @@ function prompt(profile: Profile, batch: readonly HnComment[]): string {
   );
 }
 
-/** Builds the HN hunt for one provider, key and profile. */
-export function createHnHunt(settings: HnHuntSettings): HuntRunner {
-  return async ({ now, signal, onProgress }): Promise<HuntResult> => {
-    const steps: HuntStep[] = waitingSteps();
-    const leads: Lead[] = [];
-    const dropped: DroppedLead[] = [];
-    const report = () => onProgress({ steps: steps.map((step) => ({ ...step })), kept: leads.length, dropped: dropped.length });
-    const set = (id: HuntStepId, change: Partial<HuntStep>) => {
-      Object.assign(steps.find((step) => step.id === id) ?? {}, change);
-      report();
-    };
-    const finish = (status: HuntResult['status'], problem?: HuntResult['problem']): HuntResult => ({
-      status,
-      leads,
-      dropped,
-      steps: steps.map((step) => ({ ...step })),
-      ...(problem ? { problem } : {}),
-    });
+/** The Hacker News stage of a real hunt (the "community" step). */
+export async function runHnStage(context: StageContext): Promise<StageEnd> {
+  const { settings, now, signal, sdk, model, set } = context;
+  set('community', { state: 'running', count: 0 });
 
-    // Fresh posts and their age check need web search. Funding news needs the page reader. Neither is built yet.
-    set('posts', { state: 'skipped', skipReason: 'needs-search' });
-    set('freshness', { state: 'skipped', skipReason: 'needs-search' });
-    set('funding', { state: 'skipped', skipReason: 'not-built' });
-    set('community', { state: 'running', count: 0 });
+  let comments: HnComment[];
+  try {
+    const thread = await loadHiringThread(settings.fetch, signal);
+    comments = shortlist(
+      thread.comments,
+      profileWords([...settings.profile.roles, ...settings.profile.skills]),
+      settings.profile.remote === 'remote',
+      MAX_COMMENTS,
+    );
+  } catch {
+    if (signal.aborted) return 'cancelled';
+    set('community', { state: 'failed' });
+    return { stop: 'hn-down' };
+  }
 
-    let comments: HnComment[];
+  const { z } = await import('zod');
+  const schema = z.object({
+    leads: z.array(
+      z.object({
+        commentId: z.string(),
+        company: z.string(),
+        role: z.string(),
+        about: z.string(),
+        location: z.string(),
+        pay: z.string(),
+        verdict: z.enum(['keep', 'drop']),
+        reason: z.enum(['fits', 'location', 'role-mismatch', 'pay-below-floor', 'recruiter']),
+        evidence: z.string(),
+        fit: z.string(),
+        hook: z.string(),
+      }),
+    ),
+  });
+
+  let checked = 0;
+  for (let start = 0; start < comments.length; start += BATCH) {
+    if (signal.aborted) return 'cancelled';
+    const batch = comments.slice(start, start + BATCH);
+    const byId = new Map(batch.map((comment) => [comment.id, comment]));
     try {
-      const thread = await loadHiringThread(settings.fetch, signal);
-      comments = shortlist(
-        thread.comments,
-        profileWords([...settings.profile.roles, ...settings.profile.skills]),
-        settings.profile.remote === 'remote',
-        MAX_COMMENTS,
-      );
-    } catch {
-      if (signal.aborted) return finish('cancelled');
-      set('community', { state: 'failed' });
-      return finish('failed', 'hn-down');
-    }
-
-    let generate: Awaited<ReturnType<typeof loadSdk>>;
-    let model: Awaited<ReturnType<typeof loadModel>>;
-    let schema;
-    try {
-      generate = await loadSdk();
-      model = await loadModel(settings.provider, settings.key, settings.fetch);
-      const { z } = await import('zod');
-      schema = z.object({
-        leads: z.array(
-          z.object({
-            commentId: z.string(),
-            company: z.string(),
-            role: z.string(),
-            about: z.string(),
-            location: z.string(),
-            pay: z.string(),
-            verdict: z.enum(['keep', 'drop']),
-            reason: z.enum(['fits', 'location', 'role-mismatch', 'pay-below-floor', 'recruiter']),
-            evidence: z.string(),
-            fit: z.string(),
-            hook: z.string(),
-          }),
-        ),
+      const result = await sdk.generateText({
+        model,
+        system: SYSTEM,
+        prompt: prompt(settings.profile, batch),
+        output: sdk.Output.object({ schema }),
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        maxRetries: MAX_RETRIES,
+        abortSignal: signal,
       });
-    } catch {
-      set('community', { state: 'failed' });
-      return finish('failed', 'unknown');
-    }
-
-    let checked = 0;
-    let unread = 0;
-    for (let start = 0; start < comments.length; start += BATCH) {
-      if (signal.aborted) return finish('cancelled');
-      const batch = comments.slice(start, start + BATCH);
-      const byId = new Map(batch.map((comment) => [comment.id, comment]));
-      try {
-        const result = await generate.generateText({
-          model,
-          system: SYSTEM,
-          prompt: prompt(settings.profile, batch),
-          output: generate.Output.object({ schema }),
-          maxOutputTokens: MAX_OUTPUT_TOKENS,
-          maxRetries: MAX_RETRIES,
-          abortSignal: signal,
-        });
-        const seen = new Set<string>();
-        for (const verdict of result.output.leads as Verdict[]) {
-          const comment = byId.get(verdict.commentId);
-          // An id that wasn't sent, or a second answer for one comment, is ignored.
-          if (!comment || seen.has(comment.id)) continue;
-          seen.add(comment.id);
-          const judged = judge(verdict, comment, settings.profile, now);
-          if (judged.kind === 'drop') dropped.push(judged.dropped);
-          else if (settings.knownKeys.has(judged.lead.key) || leads.some((lead) => lead.key === judged.lead.key)) {
-            dropped.push({ company: judged.lead.company, reason: 'duplicate', sourceUrl: commentUrl(comment.id) });
-          } else leads.push(judged.lead);
-        }
-      } catch (error) {
-        if (signal.aborted) return finish('cancelled');
-        const problem = classifyProviderError(error);
-        // A key or account problem stops the hunt. Anything else loses only this batch.
-        if (problem === 'wrong-key' || problem === 'no-credit' || problem === 'no-connection' || problem === 'rate-limited') {
-          set('community', { state: 'failed', count: checked });
-          return finish('failed', problem);
-        }
-        // This batch is lost. It isn't counted as checked, and the outcome says so (FR-4.11).
-        unread += batch.length;
-        continue;
+      const seen = new Set<string>();
+      for (const verdict of result.output.leads as Verdict[]) {
+        const comment = byId.get(verdict.commentId);
+        // An id that wasn't sent, or a second answer for one comment, is ignored.
+        if (!comment || seen.has(comment.id)) continue;
+        seen.add(comment.id);
+        const judged = judge(verdict, comment, settings.profile, now);
+        if (judged.kind === 'drop') context.drop(judged.dropped);
+        else context.keep(judged.lead);
       }
-      checked += batch.length;
-      set('community', { count: checked });
+    } catch (error) {
+      if (signal.aborted) return 'cancelled';
+      const problem = stopsTheHunt(error);
+      if (problem) {
+        set('community', { state: 'failed', count: checked });
+        return { stop: problem };
+      }
+      // This batch is lost. It isn't counted as checked, and the outcome says so (FR-4.11).
+      context.addUnread(batch.length);
+      continue;
     }
+    checked += batch.length;
+    set('community', { count: checked });
+  }
 
-    set('community', { state: 'done', count: checked });
-    set('contacts', { state: 'done', count: leads.reduce((total, lead) => total + lead.people.length, 0) });
-    return { ...finish('completed'), ...(unread > 0 ? { unread } : {}) };
-  };
+  set('community', { state: 'done', count: checked });
+  return 'done';
 }

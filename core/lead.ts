@@ -2,6 +2,7 @@
 // as typed fields, plus the extras kept in `get-me-hired.json` (§11.3).
 
 import type { LeadStatus, LeadType } from './leads-csv';
+import type { ProviderId } from './providers';
 
 export type { LeadStatus, LeadType } from './leads-csv';
 
@@ -38,6 +39,12 @@ export interface LeadSource {
   url: string;
   /** Local date the source was seen. */
   seen: string;
+  /**
+   * Set when an AI provider read this page for the app, and the app could not
+   * check the facts itself (funding news). Shown on the lead, so a fact read by
+   * the AI is never shown as checked (principle 2).
+   */
+  readBy?: ProviderId;
 }
 
 /** A checkable fact the user can mention in their own email (FR-4.20). Never email text. */

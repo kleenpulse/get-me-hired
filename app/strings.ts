@@ -252,6 +252,8 @@ export const strings = {
     skipReasons: {
       'needs-search': 'Needs web search',
       'not-built': 'Not built yet',
+      'needs-page-reader': "Needs Gemini's page reader",
+      'switched-off': 'Off for now',
     },
     tally: (kept: number, dropped: number) => `Kept ${kept} · Dropped ${dropped}`,
     cancel: 'Cancel',
@@ -259,7 +261,9 @@ export const strings = {
     cancelled: (kept: number) => `Hunt cancelled. ${plural(kept, 'lead', 'leads')} found so far were kept.`,
     nothingNew: 'Hunt finished. Nothing new today.',
     yourProvider: 'your AI provider',
-    unread: (count: number) => `We couldn't read ${plural(count, 'opening', 'openings')}. Run the hunt again later to try them.`,
+    failedSources: (hosts: readonly string[]) => `We couldn't search ${listWords(hosts)} today.`,
+    unread: (count: number) =>
+      `We couldn't check ${plural(count, 'possible lead', 'possible leads')} this time. Run the hunt again later to try them.`,
     failed: (problem: KeyProblem | 'hn-down', provider: string, kept: number) => {
       const why =
         problem === 'hn-down'
@@ -359,6 +363,8 @@ export const strings = {
     hookSource: 'Source',
     sourcesLabel: 'Where this lead came from',
     sourceKinds: { post: 'Hiring post', funding: 'Funding news', community: 'Community thread' },
+    readBy: (provider: string) =>
+      `The round, its date and the headline were read by ${provider} from the linked page. Not checked by the app.`,
     details: 'Details',
     close: 'Close',
     history: 'History',

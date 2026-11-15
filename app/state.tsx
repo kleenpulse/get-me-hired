@@ -145,7 +145,13 @@ function huntMessage(result: HuntResult, added: number, provider: ProviderId | n
   if (result.status === 'failed') return strings.hunt.failed(result.problem ?? 'unknown', providerName(provider), added);
   if (result.status === 'cancelled') return strings.hunt.cancelled(result.leads.length);
   const outcome = added === 0 ? strings.hunt.nothingNew : strings.hunt.finished(added);
-  return result.unread ? `${outcome} ${strings.hunt.unread(result.unread)}` : outcome;
+  return [
+    outcome,
+    result.failedSources?.length ? strings.hunt.failedSources(result.failedSources) : '',
+    result.unread ? strings.hunt.unread(result.unread) : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** Adds the leads a hunt found. A lead whose key already exists changes nothing (FR-6.8). */
@@ -280,13 +286,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const runner: Promise<HuntRunner> =
       sample || !provider || !key || !profile
         ? Promise.resolve(createSampleHunt(pause))
-        : import('@/core/hn-hunt').then(({ createHnHunt }) =>
-            createHnHunt({
+        : import('@/core/real-hunt').then(({ createRealHunt }) =>
+            createRealHunt({
               provider,
               key,
               profile,
               fetch: window.fetch.bind(window),
               knownKeys: new Set(leads.map((lead) => lead.key)),
+              // Off for now: Gemini's page reader can't see links, so no round can be confirmed
+              // at its own article (AC-4.6), and the stage would spend a minute to keep nothing.
+              // It comes back on with a page reader that returns links (Firecrawl, FR-2.3). FRD §19.
+              sources: { funding: false },
             }),
           );
 
